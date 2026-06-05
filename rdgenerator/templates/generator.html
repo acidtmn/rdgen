@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RustDesk Custom Client Builder</title>
+    <title>Генератор установщиков RustDesk</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
     <style>
@@ -224,15 +224,18 @@
       </style>
 </head>
 <body>
-    <h1><i class="fas fa-cogs"></i> RustDesk Custom Client Builder</h1>
+    <h1><i class="fas fa-cogs"></i> Генератор установщиков RustDesk</h1>
+    <p style="text-align: center; color: #c9d4ff; max-width: 980px; margin: 0 auto 24px auto;">
+        Сервис по умолчанию подставляет русскую локализацию, РФ-ориентированные ссылки и legal-уведомление для выдаваемого установщика.
+    </p>
     <form id="myForm" action="/generator" method="post" enctype="multipart/form-data">
         <div class="save-load-section-container">
             <div class="section">
-                <h2 id="saveLoadTitle">Save/Load Configuration <i class="fas fa-chevron-down"></i></h2>  
+                <h2 id="saveLoadTitle">Сохранение и загрузка конфигурации <i class="fas fa-chevron-down"></i></h2>  
                 <div class="save-load-section">  
-                    <button type="button" onclick="saveFormData()">Save Configuration</button>
+                    <button type="button" onclick="saveFormData()">Сохранить конфигурацию</button>
                     <input type="file" id="fileInput" style="display:none;" accept=".json">
-                    <button type="button" onclick="loadFormData()">Load Configuration</button>
+                    <button type="button" onclick="loadFormData()">Загрузить конфигурацию</button>
                 </div>
             </div>
         </div>

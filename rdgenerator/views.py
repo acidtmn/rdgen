@@ -14,11 +14,14 @@ import pyzipper
 from django.conf import settings as _settings
 from django.db.models import Q
 from .forms import GenerateForm
+from .helper.russian_distribution import RussianDistributionHelper
 from .models import GithubRun
 from PIL import Image
 from urllib.parse import quote
 
 def generator_view(request):
+    regional_defaults = RussianDistributionHelper.get_defaults()
+
     if request.method == 'POST':
         form = GenerateForm(request.POST, request.FILES)
         if form.is_valid():
@@ -46,9 +49,9 @@ def generator_view(request):
             if not apiServer:
                 apiServer = server+":21114"
             if not urlLink:
-                urlLink = "https://rustdesk.com"
+                urlLink = regional_defaults.homepage_url
             if not downloadLink:
-                downloadLink = "https://rustdesk.com/download"
+                downloadLink = regional_defaults.download_url
             direction = form.cleaned_data['direction']
             installation = form.cleaned_data['installation']
             settings = form.cleaned_data['settings']
@@ -58,7 +61,7 @@ def generator_view(request):
             filename = form.cleaned_data['exename']
             compname = form.cleaned_data['compname']
             if not compname:
-                compname = "Purslane Ltd"
+                compname = regional_defaults.company_name
             androidappid = form.cleaned_data['androidappid']
             if not androidappid:
                 androidappid = "com.carriez.flutter_hbb"
@@ -273,7 +276,9 @@ def generator_view(request):
                 "removeNewVersionNotif": 'true' if removeNewVersionNotif else 'false',
                 "compname": compname,
                 "androidappid":androidappid,
-                "filename":filename
+                "filename":filename,
+                "defaultLanguage": regional_defaults.default_language,
+                "legalNotice": regional_defaults.legal_notice,
             }
 
             temp_json_path = f"data_{uuid.uuid4()}.json"
@@ -336,7 +341,14 @@ def generator_view(request):
     else:
         form = GenerateForm()
     #return render(request, 'maintenance.html')
-    return render(request, 'generator.html', {'form': form})
+    return render(
+        request,
+        'generator.html',
+        {
+            'form': form,
+            'regional_defaults': regional_defaults,
+        },
+    )
 
 
 from django.shortcuts import render, get_object_or_404

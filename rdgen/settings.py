@@ -29,6 +29,26 @@ ZIP_PASSWORD = os.environ.get("ZIP_PASSWORD",'insecure')
 PROTOCOL = os.environ.get("PROTOCOL", 'https')
 REPONAME = os.environ.get("REPONAME", 'rdgen')
 SH_SECRET = os.environ.get('SH_SECRET', 'secret')
+RD_DEFAULT_LANGUAGE = os.environ.get("RD_DEFAULT_LANGUAGE", "ru")
+RD_DEFAULT_HOMEPAGE_URL = os.environ.get(
+    "RD_DEFAULT_HOMEPAGE_URL",
+    "https://support.example.ru/rustdesk",
+)
+RD_DEFAULT_DOWNLOAD_URL = os.environ.get(
+    "RD_DEFAULT_DOWNLOAD_URL",
+    "https://downloads.example.ru/rustdesk",
+)
+RD_DEFAULT_COMPANY_NAME = os.environ.get("RD_DEFAULT_COMPANY_NAME", "RustDesk RU")
+RD_RF_LEGAL_NOTICE = os.environ.get(
+    "RD_RF_LEGAL_NOTICE",
+    (
+        "Настоящая сборка предназначена для законного удалённого доступа, "
+        "администрирования и технической поддержки. Пользователь обязан "
+        "применять программное обеспечение только при наличии правовых "
+        "оснований и в соответствии с применимым законодательством "
+        "Российской Федерации."
+    ),
+)
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -117,9 +137,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'ru-ru'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Yekaterinburg'
 
 USE_I18N = True
 

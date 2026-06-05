@@ -1,5 +1,6 @@
 from django import forms
 from PIL import Image
+from .helper.russian_distribution import RussianDistributionHelper
 
 class GenerateForm(forms.Form):
     sh_secret_field = forms.CharField(required=False)
@@ -85,6 +86,15 @@ class GenerateForm(forms.Form):
     cycleMonitor = forms.BooleanField(initial=False, required=False)
     xOffline = forms.BooleanField(initial=False, required=False)
     removeNewVersionNotif = forms.BooleanField(initial=False, required=False)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Инициализируем только региональные значения по умолчанию,
+        # чтобы сам контракт формы оставался в одном месте, а подмена
+        # ссылок и реквизитов не размазывалась по шаблонам и view-слою.
+        for field_name, field_value in RussianDistributionHelper.get_form_initials().items():
+            self.fields[field_name].initial = field_value
 
     def clean_iconfile(self):
         print("checking icon")
