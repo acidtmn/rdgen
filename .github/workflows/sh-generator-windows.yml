@@ -143,6 +143,14 @@ jobs:
           name: bridge-artifact
           path: ./
 
+      - name: Apply Russian distribution defaults
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $patchUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches/apply_russian_distribution.py"
+          Invoke-WebRequest -Uri $patchUrl -OutFile apply_russian_distribution.py
+          python apply_russian_distribution.py
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
