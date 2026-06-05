@@ -22,16 +22,35 @@ runs:
         import pyzipper
         import json
         import os
+        import sys
+        import uuid
 
+        # На Windows runner стандартная консоль часто живет в cp1252, из-за чего
+        # прямой вывод русских символов в workflow-команды падает с UnicodeEncodeError.
+        # Явно переводим stdout/stderr в UTF-8, чтобы add-mask и обычные логи
+        # безопасно переживали кириллицу.
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+
+        # Сначала расшифровываем архив и читаем JSON целиком, чтобы далее
+        # единообразно обработать как обычные, так и многострочные значения.
         with pyzipper.AESZipFile('${{ inputs.zip_path }}') as zf:
             zf.setpassword('${{ inputs.zip_password }}'.encode())
             with zf.open('secrets.json') as f:
                 secrets = json.load(f)
 
-        with open(os.environ['GITHUB_ENV'], 'a') as env_file:
+        # GitHub Actions ожидает UTF-8 в GITHUB_ENV. Открываем файл явно в UTF-8
+        # и используем heredoc-формат, потому что часть значений может содержать
+        # переносы строк, например русское юридическое уведомление.
+        with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env_file:
             for key, value in secrets.items():
                 if value:
+                    value = str(value)
                     print(f"::add-mask::{value}")
-                    env_file.write(f"{key}={value}\n")
+
+                    delimiter = f"RDGEN_{uuid.uuid4().hex}"
+                    env_file.write(f"{key}<<{delimiter}\n")
+                    env_file.write(f"{value}\n")
+                    env_file.write(f"{delimiter}\n")
         
         print(f"Successfully masked {len(secrets)} secrets.")
