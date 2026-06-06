@@ -15,6 +15,7 @@ from django.conf import settings as _settings
 from django.db.models import Q
 from .forms import GenerateForm
 from .helper.russian_distribution import RussianDistributionHelper
+from .helper.workflow_target import WorkflowTargetHelper
 from .models import GithubRun
 from PIL import Image
 from urllib.parse import quote
@@ -26,10 +27,11 @@ def generator_view(request):
         form = GenerateForm(request.POST, request.FILES)
         if form.is_valid():
             user_secret = form.cleaned_data['sh_secret_field']
-            if _settings.SH_SECRET == user_secret:
-                selfhosted = True
-            else:
-                selfhosted = False
+            selfhosted = WorkflowTargetHelper.should_use_selfhosted(
+                user_secret=user_secret,
+                settings_secret=_settings.SH_SECRET,
+                selfhosted_enabled=_settings.ENABLE_SELFHOSTED_GENERATION,
+            )
             platform = form.cleaned_data['platform']
             version = form.cleaned_data['version']
             delayFix = form.cleaned_data['delayFix']

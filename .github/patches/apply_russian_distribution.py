@@ -72,6 +72,24 @@ def patch_default_language(project_root: Path, default_language: str) -> None:
     lang_path.write_text(content, encoding="utf-8")
 
 
+def patch_msi_codepage(project_root: Path) -> None:
+    package_path = project_root / "res" / "msi" / "Package" / "Package.wxs"
+    if not package_path.exists():
+        return
+
+    content = package_path.read_text(encoding="utf-8")
+    package_marker = 'UpgradeCode="$(var.UpgradeCode)" Scope="perMachine">'
+    package_with_codepage = 'UpgradeCode="$(var.UpgradeCode)" Scope="perMachine" Codepage="1251">'
+
+    # WiX по умолчанию пытается собрать MSI в западной code page 1252.
+    # Для русских строк этого недостаточно, поэтому переключаем кодовую страницу
+    # самой MSI-базы на 1251 до этапа компиляции installer-пакета.
+    if package_with_codepage not in content:
+        content = replace_or_fail(content, package_marker, package_with_codepage, package_path)
+
+    package_path.write_text(content, encoding="utf-8")
+
+
 def patch_kv_strings(file_path: Path, replacements: dict[str, str]) -> None:
     if not file_path.exists():
         return
@@ -146,6 +164,7 @@ def main() -> None:
     legal_notice = os.environ.get("legalNotice", "").strip()
 
     patch_default_language(project_root, default_language)
+    patch_msi_codepage(project_root)
     patch_msi_language(project_root)
     patch_license(project_root, legal_notice)
 
