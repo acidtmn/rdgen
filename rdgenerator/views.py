@@ -280,6 +280,7 @@ def generator_view(request):
                 "androidappid":androidappid,
                 "filename":filename,
                 "defaultLanguage": regional_defaults.default_language,
+                "privacyUrl": regional_defaults.privacy_url,
                 "legalNotice": regional_defaults.legal_notice,
             }
 
@@ -595,3 +596,19 @@ def get_zip(request):
         })
 
     return response
+
+
+def privacy_policy(request):
+    regional_defaults = RussianDistributionHelper.get_defaults()
+
+    # Эта страница является каноническим privacy policy для белой RU-выдачи,
+    # чтобы установщик и клиент всегда открывали локализованный документ с RF-формулировками.
+    return render(
+        request,
+        'privacy.html',
+        {
+            'company_name': regional_defaults.company_name,
+            'homepage_url': regional_defaults.homepage_url,
+            'download_url': regional_defaults.download_url,
+        },
+    )

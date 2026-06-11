@@ -7,6 +7,7 @@ class RussianDistributionDefaults:
     default_language: str
     homepage_url: str
     download_url: str
+    privacy_url: str
     company_name: str
     legal_notice: str
 
@@ -14,19 +15,25 @@ class RussianDistributionDefaults:
 class RussianDistributionHelper:
     @staticmethod
     def get_defaults() -> RussianDistributionDefaults:
-        # Держим все RU/RF-специфичные значения в одном месте, чтобы web-слой
-        # только читал готовые настройки и не решал сам, какие ссылки, язык
-        # и юридический текст подставлять для локальной выдачи.
+        homepage_url = os.environ.get(
+            "RD_DEFAULT_HOMEPAGE_URL",
+            "https://support.example.ru/rustdesk",
+        )
+        genurl = os.environ.get("GENURL", "").rstrip("/")
+        privacy_url = os.environ.get("RD_DEFAULT_PRIVACY_URL")
+        if not privacy_url:
+            privacy_url = f"{genurl}/privacy.html" if genurl else "https://example.ru/privacy.html"
+
+        # Собираем все региональные значения в одном helper, чтобы контроллеры и формы
+        # получали уже готовые значения по умолчанию и не дублировали RF-логику.
         return RussianDistributionDefaults(
             default_language=os.environ.get("RD_DEFAULT_LANGUAGE", "ru"),
-            homepage_url=os.environ.get(
-                "RD_DEFAULT_HOMEPAGE_URL",
-                "https://support.example.ru/rustdesk",
-            ),
+            homepage_url=homepage_url,
             download_url=os.environ.get(
                 "RD_DEFAULT_DOWNLOAD_URL",
                 "https://downloads.example.ru/rustdesk",
             ),
+            privacy_url=privacy_url,
             company_name=os.environ.get("RD_DEFAULT_COMPANY_NAME", "RustDesk RU"),
             legal_notice=os.environ.get(
                 "RD_RF_LEGAL_NOTICE",
@@ -45,8 +52,8 @@ class RussianDistributionHelper:
     def get_form_initials() -> dict:
         defaults = RussianDistributionHelper.get_defaults()
 
-        # Возвращаем только те initial-значения, которые должны автоматически
-        # появляться в форме при открытии генератора.
+        # В форму подставляем только те поля, которые пользователь реально может менять
+        # на экране генератора без отдельного системного конфига.
         return {
             "urlLink": defaults.homepage_url,
             "downloadLink": defaults.download_url,
