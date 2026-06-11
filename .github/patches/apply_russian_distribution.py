@@ -33,7 +33,7 @@ MSI_PACKAGE_STRINGS_RU = {
     "AnotherAppDialogDescription": "Приложение установлено другим способом. Сначала удалите существующую установку.",
     "MyInstallDirDlgDesktopShortcuts": "Создать значок на рабочем столе",
     "MyInstallDirDlgStartMenuShortcuts": "Создать ярлыки в меню Пуск",
-    "MyInstallDirDlgPrinter": "Установить принтер RustDesk",
+    "MyInstallDirDlgPrinter": "Установить RustDesk Printer",
 }
 
 MSI_WIXEXT_STRINGS_RU = {
@@ -64,8 +64,8 @@ def patch_default_language(project_root: Path, default_language: str) -> None:
     content = lang_path.read_text(encoding="utf-8")
     old = '    let locale = sys_locale::get_locale().unwrap_or_default();\n'
     new = (
-        "    // Для white-label сборки фиксируем язык по умолчанию, чтобы выдаваемый\n"
-        "    // клиент сразу открывался на нужной локали без зависимости от языка ОС.\n"
+        "    // Для white-label сборки фиксируем язык по умолчанию, чтобы клиент\n"
+        "    // открывался на нужной локали независимо от языка операционной системы.\n"
         f'    let locale = "{default_language}".to_owned();\n'
     )
     content = replace_or_fail(content, old, new, lang_path)
@@ -81,9 +81,8 @@ def patch_msi_codepage(project_root: Path) -> None:
     package_marker = 'UpgradeCode="$(var.UpgradeCode)" Scope="perMachine">'
     package_with_codepage = 'UpgradeCode="$(var.UpgradeCode)" Scope="perMachine" Codepage="1251">'
 
-    # WiX по умолчанию пытается собрать MSI в западной code page 1252.
-    # Для русских строк этого недостаточно, поэтому переключаем кодовую страницу
-    # самой MSI-базы на 1251 до этапа компиляции installer-пакета.
+    # WiX по умолчанию использует западную кодовую страницу, а нам нужна 1251,
+    # иначе русские строки в MSI-таблицах будут собраны некорректно.
     if package_with_codepage not in content:
         content = replace_or_fail(content, package_marker, package_with_codepage, package_path)
 
@@ -96,15 +95,15 @@ def patch_msi_project_localizations(project_root: Path) -> None:
         return
 
     content = package_project_path.read_text(encoding="utf-8")
-    required_block = (
-        '  <ItemGroup>\n'
-        '    <WixLocalization Include="Language\\Package.ru-ru.wxl" />\n'
-        '    <WixLocalization Include="Language\\WixExt_ru-ru.wxl" />\n'
-        '  </ItemGroup>\n'
-    )
-
+    missing_localizations = []
     if 'WixLocalization Include="Language\\Package.ru-ru.wxl"' not in content:
-        content = content.rstrip() + "\n" + required_block
+        missing_localizations.append('    <WixLocalization Include="Language\\Package.ru-ru.wxl" />')
+    if 'WixLocalization Include="Language\\WixExt_ru-ru.wxl"' not in content:
+        missing_localizations.append('    <WixLocalization Include="Language\\WixExt_ru-ru.wxl" />')
+
+    if missing_localizations:
+        block = "  <ItemGroup>\n" + "\n".join(missing_localizations) + "\n  </ItemGroup>\n"
+        content = replace_or_fail(content, "</Project>", block + "</Project>", package_project_path)
 
     package_project_path.write_text(content, encoding="utf-8")
 
@@ -128,8 +127,8 @@ def patch_kv_strings(file_path: Path, replacements: dict[str, str]) -> None:
 
 
 def to_rtf_unicode(value: str) -> str:
-    # Добавляем legal-блок в RTF через экранирование Unicode-кодов,
-    # чтобы текст корректно попал в MSI-лицензию без ручного редактирования RTF.
+    # Преобразуем Unicode-строку в RTF-совместимый вид, чтобы legal-блок
+    # попал в стандартную лицензию MSI без ручного редактирования бинарных ресурсов.
     parts = []
     for char in value:
         if char == "\n":
@@ -179,25 +178,13 @@ def patch_msi_language(project_root: Path) -> None:
 
     package_content = package_en_path.read_text(encoding="utf-8")
     package_content = package_content.replace('Culture="en-us" Codepage="1252"', 'Culture="ru-ru" Codepage="1251"')
-    for key, value in MSI_PACKAGE_STRINGS_RU.items():
-        marker = f'<String Id="{key}"'
-        if marker not in package_content:
-            continue
-        value_start = package_content.index('Value="', package_content.index(marker)) + len('Value="')
-        value_end = package_content.index('"', value_start)
-        package_content = package_content[:value_start] + value + package_content[value_end:]
     package_ru_path.write_text(package_content, encoding="utf-8")
+    patch_kv_strings(package_ru_path, MSI_PACKAGE_STRINGS_RU)
 
     wixext_content = wixext_en_path.read_text(encoding="utf-8")
     wixext_content = wixext_content.replace('Culture="en-us"', 'Culture="ru-ru"')
-    for key, value in MSI_WIXEXT_STRINGS_RU.items():
-        marker = f'<String Id="{key}"'
-        if marker not in wixext_content:
-            continue
-        value_start = wixext_content.index('Value="', wixext_content.index(marker)) + len('Value="')
-        value_end = wixext_content.index('"', value_start)
-        wixext_content = wixext_content[:value_start] + value + wixext_content[value_end:]
     wixext_ru_path.write_text(wixext_content, encoding="utf-8")
+    patch_kv_strings(wixext_ru_path, MSI_WIXEXT_STRINGS_RU)
 
 
 def main() -> None:

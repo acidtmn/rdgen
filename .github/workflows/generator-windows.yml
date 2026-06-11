@@ -620,8 +620,12 @@ jobs:
           max_attempts: 3
           shell: bash
           command: |
-            curl --fail --show-error --location --max-time 540 -X POST -H "Content-Type: multipart/form-data" -H "Authorization: Bearer ${{ env.token }}" -F "file=@./SignOutput/${{ env.filename }}.exe" -F "uuid=${{ env.uuid }}" ${{ secrets.GENURL }}/save_custom_client
-            curl --fail --show-error --location --max-time 540 -X POST -H "Content-Type: multipart/form-data" -H "Authorization: Bearer ${{ env.token }}" -F "file=@./SignOutput/${{ env.filename }}.msi" -F "uuid=${{ env.uuid }}" ${{ secrets.GENURL }}/save_custom_client || true
+            auth_header=()
+            if [ -n "${{ env.token }}" ]; then
+              auth_header=(-H "Authorization: Bearer ${{ env.token }}")
+            fi
+            curl --fail --show-error --location --max-time 540 -X POST "${auth_header[@]}" -F "file=@./SignOutput/${{ env.filename }}.exe" -F "uuid=${{ env.uuid }}" ${{ secrets.GENURL }}/save_custom_client
+            curl --fail --show-error --location --max-time 540 -X POST "${auth_header[@]}" -F "file=@./SignOutput/${{ env.filename }}.msi" -F "uuid=${{ env.uuid }}" ${{ secrets.GENURL }}/save_custom_client || true
 
       - name: send file to api server
         if: ${{ env.rdgen == 'false' }}
@@ -631,8 +635,12 @@ jobs:
           max_attempts: 3
           shell: bash
           command: |
-            curl --fail --show-error --location --max-time 540 -X POST -H "Content-Type: multipart/form-data" -H "Authorization: Bearer ${{ env.token }}" -F "file=@./SignOutput/${{ env.filename }}.exe" ${{ env.apiServer }}/api/save_custom_client
-            curl --fail --show-error --location --max-time 540 -X POST -H "Content-Type: multipart/form-data" -H "Authorization: Bearer ${{ env.token }}" -F "file=@./SignOutput/${{ env.filename }}.msi" ${{ env.apiServer }}/api/save_custom_client || true
+            auth_header=()
+            if [ -n "${{ env.token }}" ]; then
+              auth_header=(-H "Authorization: Bearer ${{ env.token }}")
+            fi
+            curl --fail --show-error --location --max-time 540 -X POST "${auth_header[@]}" -F "file=@./SignOutput/${{ env.filename }}.exe" ${{ env.apiServer }}/api/save_custom_client
+            curl --fail --show-error --location --max-time 540 -X POST "${auth_header[@]}" -F "file=@./SignOutput/${{ env.filename }}.msi" ${{ env.apiServer }}/api/save_custom_client || true
 
   cleanup:
     needs: [build-for-windows-flutter]

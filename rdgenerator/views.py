@@ -542,9 +542,18 @@ def save_png(file, uuid, domain, name):
     return domain, uuid, name
 
 def save_custom_client(request):
-    file = request.FILES['file']
+    # Возвращаем явную ошибку, если workflow прислал некорректный multipart-запрос,
+    # чтобы проблема была видна в логах сразу, а не маскировалась падением дальше по цепочке.
+    file = request.FILES.get('file')
     myuuid = request.POST.get('uuid')
+    if file is None:
+        return HttpResponse("Missing file", status=400)
+    if not myuuid:
+        return HttpResponse("Missing uuid", status=400)
+
     file_save_path = "exe/%s/%s" % (myuuid, file.name)
+    # Складываем артефакты каждой сборки в отдельную папку по UUID,
+    # чтобы EXE и MSI не перетирали результаты соседних запусков.
     Path("exe/%s" % myuuid).mkdir(parents=True, exist_ok=True)
     with open(file_save_path, "wb+") as f:
         for chunk in file.chunks():
