@@ -90,6 +90,25 @@ def patch_msi_codepage(project_root: Path) -> None:
     package_path.write_text(content, encoding="utf-8")
 
 
+def patch_msi_project_localizations(project_root: Path) -> None:
+    package_project_path = project_root / "res" / "msi" / "Package" / "Package.wixproj"
+    if not package_project_path.exists():
+        return
+
+    content = package_project_path.read_text(encoding="utf-8")
+    required_block = (
+        '  <ItemGroup>\n'
+        '    <WixLocalization Include="Language\\Package.ru-ru.wxl" />\n'
+        '    <WixLocalization Include="Language\\WixExt_ru-ru.wxl" />\n'
+        '  </ItemGroup>\n'
+    )
+
+    if 'WixLocalization Include="Language\\Package.ru-ru.wxl"' not in content:
+        content = content.rstrip() + "\n" + required_block
+
+    package_project_path.write_text(content, encoding="utf-8")
+
+
 def patch_kv_strings(file_path: Path, replacements: dict[str, str]) -> None:
     if not file_path.exists():
         return
@@ -148,14 +167,37 @@ def patch_license(project_root: Path, legal_notice: str) -> None:
 
 
 def patch_msi_language(project_root: Path) -> None:
-    patch_kv_strings(
-        project_root / "res" / "msi" / "Package" / "Language" / "Package.en-us.wxl",
-        MSI_PACKAGE_STRINGS_RU,
-    )
-    patch_kv_strings(
-        project_root / "res" / "msi" / "Package" / "Language" / "WixExt_en-us.wxl",
-        MSI_WIXEXT_STRINGS_RU,
-    )
+    language_dir = project_root / "res" / "msi" / "Package" / "Language"
+    package_en_path = language_dir / "Package.en-us.wxl"
+    wixext_en_path = language_dir / "WixExt_en-us.wxl"
+
+    if not package_en_path.exists() or not wixext_en_path.exists():
+        return
+
+    package_ru_path = language_dir / "Package.ru-ru.wxl"
+    wixext_ru_path = language_dir / "WixExt_ru-ru.wxl"
+
+    package_content = package_en_path.read_text(encoding="utf-8")
+    package_content = package_content.replace('Culture="en-us" Codepage="1252"', 'Culture="ru-ru" Codepage="1251"')
+    for key, value in MSI_PACKAGE_STRINGS_RU.items():
+        marker = f'<String Id="{key}"'
+        if marker not in package_content:
+            continue
+        value_start = package_content.index('Value="', package_content.index(marker)) + len('Value="')
+        value_end = package_content.index('"', value_start)
+        package_content = package_content[:value_start] + value + package_content[value_end:]
+    package_ru_path.write_text(package_content, encoding="utf-8")
+
+    wixext_content = wixext_en_path.read_text(encoding="utf-8")
+    wixext_content = wixext_content.replace('Culture="en-us"', 'Culture="ru-ru"')
+    for key, value in MSI_WIXEXT_STRINGS_RU.items():
+        marker = f'<String Id="{key}"'
+        if marker not in wixext_content:
+            continue
+        value_start = wixext_content.index('Value="', wixext_content.index(marker)) + len('Value="')
+        value_end = wixext_content.index('"', value_start)
+        wixext_content = wixext_content[:value_start] + value + wixext_content[value_end:]
+    wixext_ru_path.write_text(wixext_content, encoding="utf-8")
 
 
 def main() -> None:
@@ -165,6 +207,7 @@ def main() -> None:
 
     patch_default_language(project_root, default_language)
     patch_msi_codepage(project_root)
+    patch_msi_project_localizations(project_root)
     patch_msi_language(project_root)
     patch_license(project_root, legal_notice)
 
