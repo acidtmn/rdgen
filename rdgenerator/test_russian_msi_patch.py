@@ -96,7 +96,7 @@ class RussianMsiPatchTests(SimpleTestCase):
                 project_root,
                 app_name="NanoDesk",
                 company_name="ООО НаноДеск",
-                homepage_url="https://rdgen.nanodesk.ru",
+                homepage_url="https://nanodesk.ru",
                 privacy_url="https://rdgen.nanodesk.ru/privacy.html",
                 legal_notice="Использование допускается только при наличии законных оснований.",
             )
@@ -111,4 +111,5 @@ class RussianMsiPatchTests(SimpleTestCase):
                 license_content,
             )
             self.assertIn("rdgen.nanodesk.ru/privacy.html", license_content)
+            self.assertIn("https://nanodesk.ru", license_content)
             self.assertNotIn("Privacy policy English text", license_content)

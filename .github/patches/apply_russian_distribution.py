@@ -258,7 +258,7 @@ def main() -> None:
     legal_notice = os.environ.get("legalNotice", "").strip()
     app_name = os.environ.get("appname", "RustDesk")
     company_name = os.environ.get("compname", "RustDesk RU")
-    homepage_url = os.environ.get("urlLink", "https://rdgen.nanodesk.ru")
+    homepage_url = os.environ.get("urlLink", "https://nanodesk.ru")
     privacy_url = os.environ.get("privacyUrl", f"{homepage_url.rstrip('/')}/privacy.html")
 
     patch_default_language(project_root, default_language)
