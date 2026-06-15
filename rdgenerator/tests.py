@@ -11,9 +11,10 @@ class RussianDistributionHelperTests(TestCase):
         # Проверяем ответственность helper: он должен централизованно возвращать
         # русскую локаль и региональные ссылки по умолчанию для генератора.
         self.assertEqual(defaults.default_language, "ru")
-        self.assertIn("support.example.ru", defaults.homepage_url)
-        self.assertIn("downloads.example.ru", defaults.download_url)
-        self.assertIn("privacy.html", defaults.privacy_url)
+        self.assertEqual(defaults.homepage_url, "https://nanodesk.ru")
+        self.assertEqual(defaults.download_url, "https://nanodesk.ru/download")
+        self.assertEqual(defaults.privacy_url, "https://rdgen.nanodesk.ru/privacy.html")
+        self.assertEqual(defaults.company_name, "NanoDesk")
         self.assertIn("Российской Федерации", defaults.legal_notice)
 
     @patch.dict(

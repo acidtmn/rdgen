@@ -17,12 +17,12 @@ class RussianDistributionHelper:
     def get_defaults() -> RussianDistributionDefaults:
         homepage_url = os.environ.get(
             "RD_DEFAULT_HOMEPAGE_URL",
-            "https://support.example.ru/rustdesk",
+            "https://nanodesk.ru",
         )
         genurl = os.environ.get("GENURL", "").rstrip("/")
         privacy_url = os.environ.get("RD_DEFAULT_PRIVACY_URL")
         if not privacy_url:
-            privacy_url = f"{genurl}/privacy.html" if genurl else "https://example.ru/privacy.html"
+            privacy_url = f"{genurl}/privacy.html" if genurl else "https://rdgen.nanodesk.ru/privacy.html"
 
         # Собираем все региональные значения в одном helper, чтобы контроллеры и формы
         # получали уже готовые значения по умолчанию и не дублировали RF-логику.
@@ -31,10 +31,10 @@ class RussianDistributionHelper:
             homepage_url=homepage_url,
             download_url=os.environ.get(
                 "RD_DEFAULT_DOWNLOAD_URL",
-                "https://downloads.example.ru/rustdesk",
+                "https://nanodesk.ru/download",
             ),
             privacy_url=privacy_url,
-            company_name=os.environ.get("RD_DEFAULT_COMPANY_NAME", "RustDesk RU"),
+            company_name=os.environ.get("RD_DEFAULT_COMPANY_NAME", "NanoDesk"),
             legal_notice=os.environ.get(
                 "RD_RF_LEGAL_NOTICE",
                 (
