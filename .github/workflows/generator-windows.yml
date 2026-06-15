@@ -620,7 +620,10 @@ jobs:
           max_attempts: 2
           shell: bash
           command: |
-            bash .github/scripts/upload_generated_windows_artifacts.sh \
+            curl --fail --show-error --location \
+              "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/scripts/upload_generated_windows_artifacts.sh" \
+              -o upload_generated_windows_artifacts.sh
+            bash upload_generated_windows_artifacts.sh \
               "${{ secrets.GENURL }}/save_custom_client" \
               "${{ env.uuid }}" \
               "${{ env.filename }}" \
@@ -635,7 +638,10 @@ jobs:
           max_attempts: 2
           shell: bash
           command: |
-            bash .github/scripts/upload_generated_windows_artifacts.sh \
+            curl --fail --show-error --location \
+              "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/scripts/upload_generated_windows_artifacts.sh" \
+              -o upload_generated_windows_artifacts.sh
+            bash upload_generated_windows_artifacts.sh \
               "${{ env.apiServer }}/api/save_custom_client" \
               "${{ env.uuid }}" \
               "${{ env.filename }}" \
