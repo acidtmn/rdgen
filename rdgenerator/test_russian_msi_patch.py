@@ -76,3 +76,39 @@ class RussianMsiPatchTests(SimpleTestCase):
             self.assertIn('Value="Создать значок на рабочем столе"', package_ru)
             self.assertIn('Culture="ru-ru"', wixext_ru)
             self.assertIn('Value="Настройка Брандмауэра Windows"', wixext_ru)
+
+    def test_license_patch_replaces_english_text_with_russian_rtf(self):
+        patch_module = load_patch_module()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir)
+            package_dir = project_root / "res" / "msi" / "Package"
+            package_dir.mkdir(parents=True, exist_ok=True)
+            license_path = package_dir / "License.rtf"
+            license_path.write_text(
+                "{\\rtf1\\ansi\\ansicpg1252\\deff0 Privacy policy English text}",
+                encoding="utf-8",
+            )
+
+            # Проверяем новый сценарий: вместо английской privacy policy
+            # MSI должен получить полноценный русский текст лицензии и уведомлений.
+            patch_module.patch_license(
+                project_root,
+                app_name="NanoDesk",
+                company_name="ООО НаноДеск",
+                homepage_url="https://rdgen.nanodesk.ru",
+                privacy_url="https://rdgen.nanodesk.ru/privacy.html",
+                legal_notice="Использование допускается только при наличии законных оснований.",
+            )
+
+            license_content = license_path.read_text(encoding="utf-8")
+            self.assertIn(
+                patch_module.to_rtf_unicode("Лицензионные условия и уведомление"),
+                license_content,
+            )
+            self.assertIn(
+                patch_module.to_rtf_unicode("152-ФЗ"),
+                license_content,
+            )
+            self.assertIn("rdgen.nanodesk.ru/privacy.html", license_content)
+            self.assertNotIn("Privacy policy English text", license_content)

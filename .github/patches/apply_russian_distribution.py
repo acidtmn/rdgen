@@ -81,8 +81,8 @@ def patch_msi_codepage(project_root: Path) -> None:
     package_marker = 'UpgradeCode="$(var.UpgradeCode)" Scope="perMachine">'
     package_with_codepage = 'UpgradeCode="$(var.UpgradeCode)" Scope="perMachine" Codepage="1251">'
 
-    # WiX по умолчанию использует западную кодовую страницу, а нам нужна 1251,
-    # иначе русские строки в MSI-таблицах будут собраны некорректно.
+    # WiX по умолчанию использует западную кодовую страницу, а для русских строк
+    # в MSI-базе нужна 1251, иначе установщик падает или показывает некорректный текст.
     if package_with_codepage not in content:
         content = replace_or_fail(content, package_marker, package_with_codepage, package_path)
 
@@ -127,8 +127,6 @@ def patch_kv_strings(file_path: Path, replacements: dict[str, str]) -> None:
 
 
 def to_rtf_unicode(value: str) -> str:
-    # Преобразуем Unicode-строку в RTF-совместимый вид, чтобы legal-блок
-    # попал в стандартную лицензию MSI без ручного редактирования бинарных ресурсов.
     parts = []
     for char in value:
         if char == "\n":
@@ -145,24 +143,91 @@ def to_rtf_unicode(value: str) -> str:
     return "".join(parts)
 
 
-def patch_license(project_root: Path, legal_notice: str) -> None:
+def build_rtf_document(title: str, paragraphs: list[str]) -> str:
+    rtf_parts = [
+        r"{\rtf1\ansi\ansicpg1251\deff0",
+        r"{\fonttbl{\f0\froman\fcharset204 Times New Roman;}}",
+        r"\viewkind4\uc1\pard\lang1049\f0\fs24",
+        r"\qc\b " + to_rtf_unicode(title) + r"\b0\par\par",
+    ]
+
+    for paragraph in paragraphs:
+        rtf_parts.append(r"\qj " + to_rtf_unicode(paragraph) + r"\par\par")
+
+    rtf_parts.append("}")
+    return "".join(rtf_parts)
+
+
+def build_license_paragraphs(
+    app_name: str,
+    company_name: str,
+    homepage_url: str,
+    privacy_url: str,
+    legal_notice: str,
+) -> list[str]:
+    return [
+        (
+            f"Настоящий установочный пакет программного обеспечения {app_name} предназначен для законного "
+            "удалённого доступа, администрирования, технической поддержки и сопровождения информационных систем."
+        ),
+        (
+            f"Правообладатель локализованной сборки и лицо, распространяющее данный установщик: {company_name}. "
+            f"Информационная страница: {homepage_url}."
+        ),
+        (
+            "Устанавливая и используя программное обеспечение, пользователь подтверждает, что обладает всеми "
+            "необходимыми правами и полномочиями на подключение к удалённым устройствам, обработку информации "
+            "на них и применение средств удалённого администрирования."
+        ),
+        (
+            "Пользователь и организация, внедряющая решение, самостоятельно обеспечивают соблюдение "
+            "законодательства Российской Федерации, включая Федеральный закон № 152-ФЗ «О персональных данных», "
+            "Федеральный закон № 149-ФЗ «Об информации, информационных технологиях и о защите информации», "
+            "а также иных обязательных требований по защите информации, коммерческой тайны и служебных данных."
+        ),
+        (
+            "Если в рамках работы программы осуществляется обработка персональных данных, пользователь обязан "
+            "самостоятельно определить правовые основания обработки, состав обрабатываемых данных, сроки хранения, "
+            "круг допущенных лиц и необходимые организационные и технические меры защиты."
+        ),
+        (
+            f"Политика конфиденциальности и сведения об обработке данных размещены по адресу: {privacy_url}."
+        ),
+        (
+            "Программа предоставляется по принципу «как есть», если иное прямо не установлено отдельным договором. "
+            "Пользователь принимает на себя ответственность за законность сценария применения, корректность "
+            "настроек безопасности и контроль доступа к выданной сборке."
+        ),
+        legal_notice,
+    ]
+
+
+def patch_license(
+    project_root: Path,
+    app_name: str,
+    company_name: str,
+    homepage_url: str,
+    privacy_url: str,
+    legal_notice: str,
+) -> None:
     license_path = project_root / "res" / "msi" / "Package" / "License.rtf"
-    if not license_path.exists() or not legal_notice.strip():
+    if not license_path.exists():
         return
 
-    content = license_path.read_text(encoding="utf-8")
-    legal_paragraph = (
-        r"\par\pard\sa160\sl240\slmult1\b "
-        + to_rtf_unicode("Уведомление для РФ")
-        + r"\b0 "
-        + to_rtf_unicode(legal_notice)
-        + r"\par"
+    paragraphs = build_license_paragraphs(
+        app_name=app_name,
+        company_name=company_name,
+        homepage_url=homepage_url,
+        privacy_url=privacy_url,
+        legal_notice=legal_notice.strip(),
     )
 
-    if legal_paragraph not in content:
-        content = content[:-1] + legal_paragraph + "\n}"
-
-    license_path.write_text(content, encoding="utf-8")
+    # Полностью заменяем английский privacy-policy текст на компактный русский документ,
+    # чтобы на экране лицензии в MSI пользователь видел именно релевантные условия для РФ.
+    license_path.write_text(
+        build_rtf_document("Лицензионные условия и уведомление", paragraphs),
+        encoding="utf-8",
+    )
 
 
 def patch_msi_language(project_root: Path) -> None:
@@ -191,12 +256,23 @@ def main() -> None:
     project_root = Path.cwd()
     default_language = os.environ.get("defaultLanguage", "ru")
     legal_notice = os.environ.get("legalNotice", "").strip()
+    app_name = os.environ.get("appname", "RustDesk")
+    company_name = os.environ.get("compname", "RustDesk RU")
+    homepage_url = os.environ.get("urlLink", "https://rdgen.nanodesk.ru")
+    privacy_url = os.environ.get("privacyUrl", f"{homepage_url.rstrip('/')}/privacy.html")
 
     patch_default_language(project_root, default_language)
     patch_msi_codepage(project_root)
     patch_msi_project_localizations(project_root)
     patch_msi_language(project_root)
-    patch_license(project_root, legal_notice)
+    patch_license(
+        project_root,
+        app_name=app_name,
+        company_name=company_name,
+        homepage_url=homepage_url,
+        privacy_url=privacy_url,
+        legal_notice=legal_notice,
+    )
 
 
 if __name__ == "__main__":
