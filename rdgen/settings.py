@@ -33,17 +33,17 @@ ENABLE_SELFHOSTED_GENERATION = os.environ.get("ENABLE_SELFHOSTED_GENERATION", "f
 RD_DEFAULT_LANGUAGE = os.environ.get("RD_DEFAULT_LANGUAGE", "ru")
 RD_DEFAULT_HOMEPAGE_URL = os.environ.get(
     "RD_DEFAULT_HOMEPAGE_URL",
-    "https://support.example.ru/rustdesk",
+    "https://nanodesk.ru",
 )
 RD_DEFAULT_DOWNLOAD_URL = os.environ.get(
     "RD_DEFAULT_DOWNLOAD_URL",
-    "https://downloads.example.ru/rustdesk",
+    "https://nanodesk.ru/download",
 )
-RD_DEFAULT_COMPANY_NAME = os.environ.get("RD_DEFAULT_COMPANY_NAME", "RustDesk RU")
+RD_DEFAULT_COMPANY_NAME = os.environ.get("RD_DEFAULT_COMPANY_NAME", "NanoDesk")
 RD_RF_LEGAL_NOTICE = os.environ.get(
     "RD_RF_LEGAL_NOTICE",
     (
-        "Настоящая сборка предназначена для законного удалённого доступа, "
+        "Настоящая сборка предназначена для законного удаленного доступа, "
         "администрирования и технической поддержки. Пользователь обязан "
         "применять программное обеспечение только при наличии правовых "
         "оснований и в соответствии с применимым законодательством "
