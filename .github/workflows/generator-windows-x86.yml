@@ -442,13 +442,23 @@ jobs:
         if: ${{ env.rdgen == 'true' }}
         shell: bash
         run: |
-          curl -i -X POST -H "Content-Type: multipart/form-data" -H "Authorization: Bearer ${{ env.token }}" -F "file=@./SignOutput/${{ env.filename }}.exe" -F "uuid=${{ env.uuid }}" ${{ secrets.GENURL }}/save_custom_client
+          bash .github/scripts/upload_generated_windows_artifacts.sh \
+            "${{ secrets.GENURL }}/save_custom_client" \
+            "${{ env.uuid }}" \
+            "${{ env.filename }}" \
+            "./SignOutput" \
+            "${{ env.token }}"
 
       - name: send file to api server
         if: ${{ env.rdgen == 'false' }}
         shell: bash
         run: |
-          curl -i -X POST -H "Content-Type: multipart/form-data" -H "Authorization: Bearer ${{ env.token }}" -F "file=@./SignOutput/${{ env.filename }}.exe" ${{ env.apiServer }}/api/save_custom_client
+          bash .github/scripts/upload_generated_windows_artifacts.sh \
+            "${{ env.apiServer }}/api/save_custom_client" \
+            "${{ env.uuid }}" \
+            "${{ env.filename }}" \
+            "./SignOutput" \
+            "${{ env.token }}"
 
   cleanup:
     needs: [build-for-windows-sciter]
