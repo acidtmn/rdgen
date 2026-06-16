@@ -521,6 +521,34 @@ jobs:
           mv ./Package/bin/x64/Release/ru-ru/Package.msi ../../SignOutput/rustdesk.msi
           sha256sum ../../SignOutput/rustdesk.msi
 
+      - name: verify built MSI payload
+        if: env.UPLOAD_ARTIFACT == 'true'
+        shell: pwsh
+        run: |
+          # Проверяем уже собранный MSI как бинарный файл, чтобы регресс не мог пройти
+          # даже в случае, если исходный License.rtf был корректен, а на позднем этапе
+          # в артефакт попал старый или подменённый установщик.
+          $msiPath = "./SignOutput/rustdesk.msi"
+          if (!(Test-Path $msiPath)) {
+            throw "MSI file not found after build: $msiPath"
+          }
+
+          # Ищем строки и в обычной однобайтной записи, и в UTF-16LE, потому что внутри
+          # MSI одна и та же фраза может храниться в разных представлениях.
+          $bytes = [System.IO.File]::ReadAllBytes($msiPath)
+          $textAscii = [System.Text.Encoding]::ASCII.GetString($bytes)
+          $textUtf16 = [System.Text.Encoding]::Unicode.GetString($bytes)
+
+          if ($textAscii.Contains('https://NanoDesk.') -or $textUtf16.Contains('https://NanoDesk.')) {
+            throw "Broken NanoDesk URL still present in built MSI"
+          }
+          if ($textAscii.Contains('privacy.html') -or $textUtf16.Contains('privacy.html')) {
+            throw "Privacy URL still present in built MSI"
+          }
+          if ($textAscii.Contains('rdgen.NanoDesk') -or $textUtf16.Contains('rdgen.NanoDesk')) {
+            throw "Legacy rdgen.NanoDesk reference still present in built MSI"
+          }
+
       - name: zip exe and msi
         continue-on-error: true
         shell: pwsh
@@ -548,6 +576,31 @@ jobs:
           Expand-Archive -Path ./SignOutput/signed_files.zip -DestinationPath ./SignOutput/ -Force
           Remove-Item ./SignOutput/unsigned_files.zip
           Remove-Item ./SignOutput/signed_files.zip
+
+      - name: verify signed MSI payload
+        if: env.UPLOAD_ARTIFACT == 'true'
+        shell: pwsh
+        run: |
+          # Повторяем контроль уже после подписи/перепаковки, потому что именно этот
+          # файл потом уходит пользователю на сервер и должен быть проверен в финальном виде.
+          $msiPath = "./SignOutput/rustdesk.msi"
+          if (!(Test-Path $msiPath)) {
+            throw "Signed MSI file not found: $msiPath"
+          }
+
+          $bytes = [System.IO.File]::ReadAllBytes($msiPath)
+          $textAscii = [System.Text.Encoding]::ASCII.GetString($bytes)
+          $textUtf16 = [System.Text.Encoding]::Unicode.GetString($bytes)
+
+          if ($textAscii.Contains('https://NanoDesk.') -or $textUtf16.Contains('https://NanoDesk.')) {
+            throw "Broken NanoDesk URL still present in signed MSI"
+          }
+          if ($textAscii.Contains('privacy.html') -or $textUtf16.Contains('privacy.html')) {
+            throw "Privacy URL still present in signed MSI"
+          }
+          if ($textAscii.Contains('rdgen.NanoDesk') -or $textUtf16.Contains('rdgen.NanoDesk')) {
+            throw "Legacy rdgen.NanoDesk reference still present in signed MSI"
+          }
 
       - name: rename rustdesk.exe to filename.exe
         run: |
