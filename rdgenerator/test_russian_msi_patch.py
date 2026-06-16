@@ -110,8 +110,12 @@ class RussianMsiPatchTests(SimpleTestCase):
                 patch_module.to_rtf_unicode("152-ФЗ"),
                 license_content,
             )
-            self.assertIn("rdgen.nanodesk.ru/privacy.html", license_content)
             self.assertIn("https://nanodesk.ru", license_content)
+            self.assertIn(
+                patch_module.to_rtf_unicode("Информационная страница: https://nanodesk.ru."),
+                license_content,
+            )
+            self.assertNotIn("rdgen.nanodesk.ru/privacy.html", license_content)
             self.assertNotIn("Privacy policy English text", license_content)
 
     def test_license_patch_normalizes_broken_nanodesk_homepage(self):

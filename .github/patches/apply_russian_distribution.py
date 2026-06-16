@@ -232,7 +232,9 @@ def patch_license(
     if not license_path.exists():
         return
 
-    homepage_url = normalize_homepage_url(homepage_url)
+    # Для MSI-лицензии всегда используем канонический домен NanoDesk,
+    # чтобы в установщик не попадали старые или ошибочные значения из формы.
+    homepage_url = "https://nanodesk.ru"
 
     paragraphs = build_license_paragraphs(
         app_name=app_name,
@@ -241,6 +243,7 @@ def patch_license(
         privacy_url=privacy_url,
         legal_notice=legal_notice.strip(),
     )
+    paragraphs = [paragraph for paragraph in paragraphs if privacy_url not in paragraph]
 
     # Полностью заменяем английский privacy-policy текст на компактный русский документ,
     # чтобы на экране лицензии в MSI пользователь видел именно релевантные условия для РФ.
