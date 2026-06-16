@@ -597,6 +597,18 @@ jobs:
           mv ./Package/bin/x64/Release/ru-ru/Package.msi ../../SignOutput/rustdesk.msi
           sha256sum ../../SignOutput/rustdesk.msi
 
+      - name: repair built MSI license stream
+        if: env.UPLOAD_ARTIFACT == 'true'
+        shell: pwsh
+        run: |
+          # На некоторых версиях WiX в готовый MSI всё ещё может просачиваться старый
+          # RTF-поток лицензии, даже если исходный License.rtf уже исправлен. Поэтому
+          # дополнительно переписываем внутренний OLE-стрим итогового MSI каноническим текстом.
+          python -m pip install olefile
+          $patchUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches/repair_msi_license_stream.py"
+          Invoke-WebRequest -Uri $patchUrl -OutFile repair_msi_license_stream.py
+          python repair_msi_license_stream.py --msi ./SignOutput/rustdesk.msi --license ./res/msi/Package/License.rtf
+
       - name: verify built MSI payload
         if: env.UPLOAD_ARTIFACT == 'true'
         shell: pwsh
@@ -652,6 +664,17 @@ jobs:
           Expand-Archive -Path ./SignOutput/signed_files.zip -DestinationPath ./SignOutput/ -Force
           Remove-Item ./SignOutput/unsigned_files.zip
           Remove-Item ./SignOutput/signed_files.zip
+
+      - name: repair signed MSI license stream
+        if: env.UPLOAD_ARTIFACT == 'true'
+        shell: pwsh
+        run: |
+          # Повторяем repair после подписи/перепаковки, потому что именно этот MSI уходит
+          # пользователю, и финальный бинарь должен быть проверен в том виде, в каком он скачивается.
+          python -m pip install olefile
+          $patchUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches/repair_msi_license_stream.py"
+          Invoke-WebRequest -Uri $patchUrl -OutFile repair_msi_license_stream.py
+          python repair_msi_license_stream.py --msi ./SignOutput/rustdesk.msi --license ./res/msi/Package/License.rtf
 
       - name: verify signed MSI payload
         if: env.UPLOAD_ARTIFACT == 'true'
