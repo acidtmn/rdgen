@@ -261,6 +261,10 @@ jobs:
             echo "Broken NanoDesk URL still present in License.rtf"
             exit 1
           fi
+          if grep -q 'privacy.html' ./res/msi/Package/License.rtf; then
+            echo "Privacy URL still present in License.rtf"
+            exit 1
+          fi
           if ! grep -q 'https://nanodesk.ru' ./res/msi/Package/License.rtf; then
             echo "Canonical NanoDesk URL missing in License.rtf"
             exit 1
