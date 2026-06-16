@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -140,3 +141,36 @@ class RussianMsiPatchTests(SimpleTestCase):
             license_content = license_path.read_text(encoding="utf-8")
             self.assertIn("https://nanodesk.ru", license_content)
             self.assertNotIn("https://NanoDesk.", license_content)
+
+    def test_normalize_privacy_url_fixes_broken_rdgen_domain(self):
+        patch_module = load_patch_module()
+
+        self.assertEqual(
+            patch_module.normalize_privacy_url(
+                "https://rdgen.NanoDesk/privacy.html",
+                "https://nanodesk.ru",
+            ),
+            "https://rdgen.nanodesk.ru/privacy.html",
+        )
+
+    def test_normalized_urls_are_persisted_for_following_workflow_steps(self):
+        patch_module = load_patch_module()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            github_env_path = Path(temp_dir) / "github.env"
+            old_github_env = os.environ.get("GITHUB_ENV")
+            os.environ["GITHUB_ENV"] = str(github_env_path)
+            try:
+                patch_module.persist_normalized_distribution_inputs(
+                    homepage_url="https://nanodesk.ru",
+                    privacy_url="https://rdgen.nanodesk.ru/privacy.html",
+                )
+            finally:
+                if old_github_env is None:
+                    os.environ.pop("GITHUB_ENV", None)
+                else:
+                    os.environ["GITHUB_ENV"] = old_github_env
+
+            content = github_env_path.read_text(encoding="utf-8")
+            self.assertIn("urlLink=https://nanodesk.ru", content)
+            self.assertIn("privacyUrl=https://rdgen.nanodesk.ru/privacy.html", content)

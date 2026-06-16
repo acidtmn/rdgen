@@ -220,6 +220,46 @@ def normalize_homepage_url(homepage_url: str) -> str:
     return normalized or "https://nanodesk.ru"
 
 
+def normalize_privacy_url(privacy_url: str, homepage_url: str) -> str:
+    normalized = (privacy_url or "").strip()
+    if not normalized:
+        return f"{homepage_url.rstrip('/')}/privacy.html"
+
+    lowered = normalized.lower().rstrip("/")
+    if lowered in {
+        "https://rdgen.nanodesk/privacy.html",
+        "https://rdgen.nanodesk./privacy.html",
+        "https://rdgen.nanodesk",
+        "https://rdgen.nanodesk.",
+        "https://rdgen.nanodesk/privacy",
+    }:
+        return "https://rdgen.nanodesk.ru/privacy.html"
+
+    if "://rdgen.nanodesk/" in lowered or "://rdgen.nanodesk./" in lowered:
+        return "https://rdgen.nanodesk.ru/privacy.html"
+
+    if "://rdgen.nanodesk" in lowered and ".ru" not in lowered:
+        return "https://rdgen.nanodesk.ru/privacy.html"
+
+    return normalized
+
+
+def persist_normalized_distribution_inputs(
+    homepage_url: str,
+    privacy_url: str,
+) -> None:
+    github_env = os.environ.get("GITHUB_ENV")
+    if not github_env:
+        return
+
+    # Фиксируем нормализованные значения обратно в env GitHub Actions, чтобы все
+    # последующие шаги workflow использовали уже канонические ссылки, а не сырые
+    # данные из формы или старого секрета сборки.
+    with open(github_env, "a", encoding="utf-8") as env_file:
+        env_file.write(f"urlLink={homepage_url}\n")
+        env_file.write(f"privacyUrl={privacy_url}\n")
+
+
 def patch_license(
     project_root: Path,
     app_name: str,
@@ -281,8 +321,16 @@ def main() -> None:
     legal_notice = os.environ.get("legalNotice", "").strip()
     app_name = os.environ.get("appname", "RustDesk")
     company_name = os.environ.get("compname", "RustDesk RU")
-    homepage_url = os.environ.get("urlLink", "https://nanodesk.ru")
-    privacy_url = os.environ.get("privacyUrl", f"{homepage_url.rstrip('/')}/privacy.html")
+    homepage_url = normalize_homepage_url(os.environ.get("urlLink", "https://nanodesk.ru"))
+    privacy_url = normalize_privacy_url(
+        os.environ.get("privacyUrl", f"{homepage_url.rstrip('/')}/privacy.html"),
+        homepage_url,
+    )
+
+    persist_normalized_distribution_inputs(
+        homepage_url=homepage_url,
+        privacy_url=privacy_url,
+    )
 
     patch_default_language(project_root, default_language)
     patch_msi_codepage(project_root)
