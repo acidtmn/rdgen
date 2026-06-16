@@ -10,6 +10,18 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Resolve-AbsolutePath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    # Windows Installer заметно надёжнее работает с полным путём к MSI.
+    # На runner'ах относительные пути вида ./SignOutput/... иногда дают 1324/2203,
+    # хотя сам пакет при этом валиден. Поэтому канонизируем путь один раз у входа.
+    return [System.IO.Path]::GetFullPath($Path)
+}
+
 function Normalize-LicenseText {
     param(
         [Parameter(Mandatory = $true)]
@@ -233,6 +245,8 @@ if (-not (Test-Path -LiteralPath $MsiPath)) {
     throw "MSI file not found: $MsiPath"
 }
 
+$MsiPath = Resolve-AbsolutePath -Path $MsiPath
+
 if (-not $VerifyOnly) {
     if ([string]::IsNullOrWhiteSpace($LicensePath)) {
         throw 'LicensePath is required when VerifyOnly is not set.'
@@ -241,6 +255,8 @@ if (-not $VerifyOnly) {
     if (-not (Test-Path -LiteralPath $LicensePath)) {
         throw "License file not found: $LicensePath"
     }
+
+    $LicensePath = Resolve-AbsolutePath -Path $LicensePath
 
     # Читаем уже подготовленный License.rtf из рабочего дерева сборки.
     # Этот файл ранее нормализуется нашими шагами и содержит нужный русский текст.
