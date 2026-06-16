@@ -51,6 +51,30 @@
    - SIGN_API_KEY (the api key you have set on your signing api server)
 
 
+## Windows MSI troubleshooting notes
+
+These notes were confirmed on the working NanoDesk Windows 64-bit flow (`generator-windows.yml`) with Russian installer text and successful artifact delivery through `rdgen.nanodesk.ru`.
+
+1. Do not rewrite MSI license data through raw OLE stream replacement.
+   - That approach can corrupt MSI metadata and lead to installer launch errors such as "This action is only valid for products that are currently installed" because `ProductCode` or related tables become invalid.
+   - The safe path is the current `.github/patches/update_msi_license_dialog.ps1` helper, which updates `LicenseAgreementDlg/LicenseText` through the Windows Installer COM database API.
+2. Always normalize the final MSI license text right before writing it into the built MSI.
+   - In practice, intermediate WiX/preprocess steps can reintroduce legacy `https://NanoDesk` text even when `License.rtf` looked correct earlier in the workflow.
+   - The current helper normalizes old NanoDesk URLs to `https://nanodesk.ru` before the final MSI write.
+3. Always verify MSI files using absolute paths.
+   - On GitHub Actions Windows runners, relative paths like `./SignOutput/rustdesk.msi` can fail in `msiexec` validation with path/database access errors such as `1324` or `2203` even when the MSI itself is valid.
+   - The current helper resolves the MSI path and `License.rtf` path to absolute paths before opening the database and before running `msiexec /a`.
+4. A known-good end state for the Windows flow is:
+   - `sync built MSI license dialog` succeeds
+   - `verify built MSI payload` succeeds
+   - `verify signed MSI payload` succeeds
+   - `save_custom_client` receives both `.exe` and `.msi` for the run UUID
+5. If a future Windows build fails again, first inspect:
+   - `.github/patches/update_msi_license_dialog.ps1`
+   - `verify built MSI payload` in `.github/workflows/generator-windows.yml`
+   - `verify built MSI payload` in `.github/workflows/sh-generator-windows.yml`
+
+
 ## Host manually:
 
 1. A Github account with a fork of this repo  
