@@ -189,7 +189,6 @@ jobs:
             find ./src/lang -name "*.rs" -exec sed -i '/powered_by_me/s|RustDesk|${{ env.compname }}|g' {} \;
           fi
           find ./src/lang -name "*.rs" -exec sed -i -e 's|RustDesk|${{ env.appname }}|' {} \;
-          sed -i -e 's|RustDesk|${{ env.appname }}|' ./res/msi/Package/License.rtf
 
       - name: fix registry if appname has a space
         if: contains(env.appname, ' ')
@@ -223,7 +222,6 @@ jobs:
           sed -i -e 's|Purslane Ltd|${{ env.compname }}|' ./flutter/windows/runner/Runner.rc
           sed -i -e 's|Purslane Ltd|${{ env.compname }}|' ./Cargo.toml
           sed -i -e 's|Purslane Ltd|${{ env.compname }}|' ./libs/portable/Cargo.toml
-          sed -i -e 's|Purslane Ltd|${{ env.compname }}|' ./res/msi/Package/License.rtf
              
       - name: change url to custom
         if: env.urlLink != 'https://rustdesk.com'
@@ -237,7 +235,6 @@ jobs:
           sed -i -e "s|const url = 'https://rustdesk.com/';|const url = '${{ env.urlLink }}';|" ./flutter/lib/mobile/pages/settings_page.dart
           sed -i -e "s|launchUrlString('https://rustdesk.com/privacy.html')|launchUrlString('${{ env.privacyUrl }}')|" ./flutter/lib/mobile/pages/settings_page.dart
           sed -i -e "s|https://rustdesk.com/privacy.html|${{ env.privacyUrl }}|" ./flutter/lib/desktop/pages/install_page.dart
-          sed -i -e "s|rustdesk.com|${{ env.urlLink }}|" ./res/msi/Package/License.rtf
 
       - name: change download link to custom
         if: env.downloadLink != 'https://rustdesk.com/download'
@@ -255,6 +252,19 @@ jobs:
           sed -i -e 's|https://NanoDesk\.|https://nanodesk.ru|g' ./res/msi/Package/License.rtf
           sed -i -e 's|https://NanoDesk|https://nanodesk.ru|g' ./res/msi/Package/License.rtf
           sed -i -e 's|Информационная страница: NanoDesk\.|Информационная страница: https://nanodesk.ru.|g' ./res/msi/Package/License.rtf
+
+      - name: verify final MSI license text
+        continue-on-error: false
+        shell: bash
+        run: |
+          if grep -q 'https://NanoDesk' ./res/msi/Package/License.rtf; then
+            echo "Broken NanoDesk URL still present in License.rtf"
+            exit 1
+          fi
+          if ! grep -q 'https://nanodesk.ru' ./res/msi/Package/License.rtf; then
+            echo "Canonical NanoDesk URL missing in License.rtf"
+            exit 1
+          fi
 
       - name: set server, key, and apiserver
         continue-on-error: true
