@@ -202,6 +202,24 @@ def build_license_paragraphs(
     ]
 
 
+def normalize_homepage_url(homepage_url: str) -> str:
+    normalized = (homepage_url or "").strip()
+
+    # В старых/битых входных данных в MSI-текст иногда мог приезжать не домен,
+    # а брендовая строка вроде "https://NanoDesk.".
+    # Для лицензии установщика принудительно выравниваем такой случай
+    # в канонический адрес сайта, который ожидает пользователь.
+    if normalized.lower() in {
+        "https://nanodesk.",
+        "https://nanodesk",
+        "nanodesk",
+        "nanodesk.",
+    }:
+        return "https://nanodesk.ru"
+
+    return normalized or "https://nanodesk.ru"
+
+
 def patch_license(
     project_root: Path,
     app_name: str,
@@ -213,6 +231,8 @@ def patch_license(
     license_path = project_root / "res" / "msi" / "Package" / "License.rtf"
     if not license_path.exists():
         return
+
+    homepage_url = normalize_homepage_url(homepage_url)
 
     paragraphs = build_license_paragraphs(
         app_name=app_name,

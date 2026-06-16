@@ -113,3 +113,26 @@ class RussianMsiPatchTests(SimpleTestCase):
             self.assertIn("rdgen.nanodesk.ru/privacy.html", license_content)
             self.assertIn("https://nanodesk.ru", license_content)
             self.assertNotIn("Privacy policy English text", license_content)
+
+    def test_license_patch_normalizes_broken_nanodesk_homepage(self):
+        patch_module = load_patch_module()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir)
+            package_dir = project_root / "res" / "msi" / "Package"
+            package_dir.mkdir(parents=True, exist_ok=True)
+            license_path = package_dir / "License.rtf"
+            license_path.write_text("{\\rtf1\\ansi old}", encoding="utf-8")
+
+            patch_module.patch_license(
+                project_root,
+                app_name="NanoDesk",
+                company_name="ООО НаноДеск",
+                homepage_url="https://NanoDesk.",
+                privacy_url="https://rdgen.nanodesk.ru/privacy.html",
+                legal_notice="Использование допускается только при наличии законных оснований.",
+            )
+
+            license_content = license_path.read_text(encoding="utf-8")
+            self.assertIn("https://nanodesk.ru", license_content)
+            self.assertNotIn("https://NanoDesk.", license_content)
