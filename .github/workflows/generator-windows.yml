@@ -607,7 +607,7 @@ jobs:
           python -m pip install olefile
           $patchUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches/repair_msi_license_stream.py"
           Invoke-WebRequest -Uri $patchUrl -OutFile repair_msi_license_stream.py
-          python repair_msi_license_stream.py --msi ./SignOutput/rustdesk.msi --license ./res/msi/Package/License.rtf
+          python repair_msi_license_stream.py --msi ./SignOutput/rustdesk.msi
 
       - name: verify built MSI payload
         if: env.UPLOAD_ARTIFACT == 'true'
@@ -674,7 +674,7 @@ jobs:
           python -m pip install olefile
           $patchUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches/repair_msi_license_stream.py"
           Invoke-WebRequest -Uri $patchUrl -OutFile repair_msi_license_stream.py
-          python repair_msi_license_stream.py --msi ./SignOutput/rustdesk.msi --license ./res/msi/Package/License.rtf
+          python repair_msi_license_stream.py --msi ./SignOutput/rustdesk.msi
 
       - name: verify signed MSI payload
         if: env.UPLOAD_ARTIFACT == 'true'
