@@ -10,6 +10,27 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Normalize-LicenseText {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$LicenseText
+    )
+
+    # На этапе workflow итоговый License.rtf иногда повторно собирается из промежуточных файлов
+    # и может снова получить старые ссылки. Нормализуем текст прямо перед записью в MSI,
+    # чтобы результат не зависел от побочных эффектов preprocess/WiX.
+    $normalizedText = $LicenseText
+
+    # Всегда приводим старый адрес NanoDesk к каноническому домену.
+    $normalizedText = $normalizedText.Replace('https://NanoDesk.', 'https://nanodesk.ru')
+    $normalizedText = $normalizedText.Replace('https://NanoDesk', 'https://nanodesk.ru')
+    $normalizedText = $normalizedText.Replace('rdgen.NanoDesk/privacy.html', 'nanodesk.ru')
+    $normalizedText = $normalizedText.Replace('https://rdgen.NanoDesk/privacy.html', 'https://nanodesk.ru')
+    $normalizedText = $normalizedText.Replace('https://nanodesk.ru/privacy.html', 'https://nanodesk.ru')
+
+    return $normalizedText
+}
+
 function Open-MsiDatabase {
     param(
         [Parameter(Mandatory = $true)]
@@ -151,7 +172,7 @@ function Test-MsiIntegrity {
             throw 'MSI license dialog text is empty.'
         }
 
-        if ($licenseText.Contains('https://NanoDesk.')) {
+        if ($licenseText.Contains('https://NanoDesk')) {
             throw 'Legacy NanoDesk URL is still present in MSI license dialog.'
         }
 
@@ -224,6 +245,7 @@ if (-not $VerifyOnly) {
     # Читаем уже подготовленный License.rtf из рабочего дерева сборки.
     # Этот файл ранее нормализуется нашими шагами и содержит нужный русский текст.
     $licenseText = Get-Content -LiteralPath $LicensePath -Raw
+    $licenseText = Normalize-LicenseText -LicenseText $licenseText
 
     $dbInfo = Open-MsiDatabase -Path $MsiPath -Mode 1
     try {
