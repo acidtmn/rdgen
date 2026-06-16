@@ -8,8 +8,8 @@ class RussianDistributionHelperTests(TestCase):
     def test_returns_russian_defaults_for_local_distribution(self):
         defaults = RussianDistributionHelper.get_defaults()
 
-        # Проверяем ответственность helper: он должен централизованно возвращать
-        # русскую локаль и региональные ссылки по умолчанию для генератора.
+        # Helper должен централизованно возвращать русскую локаль и региональные ссылки
+        # по умолчанию для локальной white-label выдачи.
         self.assertEqual(defaults.default_language, "ru")
         self.assertEqual(defaults.homepage_url, "https://nanodesk.ru")
         self.assertEqual(defaults.download_url, "https://nanodesk.ru/download")
@@ -31,8 +31,8 @@ class RussianDistributionHelperTests(TestCase):
     def test_form_initials_follow_environment_overrides(self):
         initials = RussianDistributionHelper.get_form_initials()
 
-        # Проверяем, что брендовые и ссылочные значения могут быть переопределены
-        # через окружение без дублирования этой логики во view и шаблонах.
+        # Брендовые и ссылочные значения должны переопределяться через окружение
+        # без дублирования этой логики во view и шаблонах.
         self.assertEqual(initials["urlLink"], "https://company.example.ru/help")
         self.assertEqual(initials["downloadLink"], "https://company.example.ru/downloads")
         self.assertEqual(initials["compname"], "ООО Ромашка")
@@ -51,12 +51,25 @@ class RussianDistributionHelperTests(TestCase):
         # на встроенную русскую страницу политики самого rdgen-сайта.
         self.assertEqual(defaults.privacy_url, "https://rdgen.nanodesk.ru/privacy.html")
 
+    @patch.dict(
+        "os.environ",
+        {
+            "RD_DEFAULT_HOMEPAGE_URL": "https://NanoDesk.",
+        },
+        clear=False,
+    )
+    def test_homepage_url_is_normalized_to_nanodesk_ru(self):
+        defaults = RussianDistributionHelper.get_defaults()
+
+        # Битое значение вроде https://NanoDesk. не должно доходить до MSI-текста.
+        self.assertEqual(defaults.homepage_url, "https://nanodesk.ru")
+
 
 class PrivacyPolicyViewTests(TestCase):
     def test_privacy_page_is_available(self):
         response = self.client.get("/privacy.html")
 
-        # Проверяем пользовательский результат: встроенная политика должна
-        # открываться с сайта генератора как обычная HTML-страница.
+        # Встроенная privacy policy должна открываться как обычная HTML-страница
+        # и использоваться генератором как русская локальная политика.
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Политика конфиденциальности")

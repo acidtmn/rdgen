@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import os
+from urllib.parse import urlsplit
 
 
 @dataclass(frozen=True)
@@ -14,10 +15,39 @@ class RussianDistributionDefaults:
 
 class RussianDistributionHelper:
     @staticmethod
+    def normalize_homepage_url(homepage_url: str) -> str:
+        normalized = (homepage_url or "").strip()
+        if not normalized:
+            return "https://nanodesk.ru"
+
+        lowered = normalized.lower().rstrip("/")
+        if lowered in {
+            "https://nanodesk",
+            "https://nanodesk.",
+            "http://nanodesk",
+            "http://nanodesk.",
+            "nanodesk",
+            "nanodesk.",
+        }:
+            return "https://nanodesk.ru"
+
+        if "://" not in normalized:
+            normalized = f"https://{normalized}"
+
+        parsed = urlsplit(normalized)
+        hostname = (parsed.hostname or "").lower().rstrip(".")
+        if hostname == "nanodesk":
+            return "https://nanodesk.ru"
+
+        return normalized
+
+    @staticmethod
     def get_defaults() -> RussianDistributionDefaults:
-        homepage_url = os.environ.get(
-            "RD_DEFAULT_HOMEPAGE_URL",
-            "https://nanodesk.ru",
+        homepage_url = RussianDistributionHelper.normalize_homepage_url(
+            os.environ.get(
+                "RD_DEFAULT_HOMEPAGE_URL",
+                "https://nanodesk.ru",
+            )
         )
         genurl = os.environ.get("GENURL", "").rstrip("/")
         privacy_url = os.environ.get("RD_DEFAULT_PRIVACY_URL")

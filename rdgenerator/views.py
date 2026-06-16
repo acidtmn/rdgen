@@ -52,6 +52,7 @@ def generator_view(request):
                 apiServer = server+":21114"
             if not urlLink:
                 urlLink = regional_defaults.homepage_url
+            urlLink = RussianDistributionHelper.normalize_homepage_url(urlLink)
             if not downloadLink:
                 downloadLink = regional_defaults.download_url
             direction = form.cleaned_data['direction']
