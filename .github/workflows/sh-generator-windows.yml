@@ -297,7 +297,9 @@ jobs:
         if: ${{ env.iconlink_url != 'false' }}
         shell: pwsh
         run: |
-          .\.github\scripts\apply_windows_branding.ps1 `
+          $brandingScriptUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/scripts/apply_windows_branding.ps1"
+          Invoke-WebRequest -Uri $brandingScriptUrl -OutFile .\apply_windows_branding.ps1
+          .\apply_windows_branding.ps1 `
             -RepositoryRoot (Get-Location).Path `
             -IconBaseUrl '${{ env.iconlink_url }}' `
             -IconUuid '${{ env.iconlink_uuid }}' `
@@ -410,7 +412,9 @@ jobs:
         if: ${{ env.iconlink_url != 'false' }}
         shell: pwsh
         run: |
-          .\.github\scripts\apply_windows_branding.ps1 `
+          $brandingScriptUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/scripts/apply_windows_branding.ps1"
+          Invoke-WebRequest -Uri $brandingScriptUrl -OutFile .\apply_windows_branding.ps1
+          .\apply_windows_branding.ps1 `
             -RepositoryRoot (Get-Location).Path `
             -DistDir 'rustdesk' `
             -IconBaseUrl '${{ env.iconlink_url }}' `
