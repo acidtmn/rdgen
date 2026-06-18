@@ -136,17 +136,35 @@ function New-MsiBitmaps {
     # WiX подхватывает кастомные bitmap-ресурсы только если они реально лежат
     # в каталоге Package/Resources, поэтому создаём обе стандартные картинки
     # установщика из пользовательского логотипа.
-    magick `
-        -size 370x44 xc:"#0d1b2a" `
-        "$ImageSourcePath" -resize 220x32 `
-        -gravity center -composite `
-        (Join-Path $ResourcesDirectory "WixUIBannerBmp.bmp")
+    $bannerPath = Join-Path $ResourcesDirectory "WixUIBannerBmp.bmp"
+    $dialogPath = Join-Path $ResourcesDirectory "WixUIDialogBmp.bmp"
 
+    # Размеры берём из документации WiX/WixUI:
+    # `WixUIBannerBmp` должен быть `493x58`, а `WixUIDialogBmp` должен быть `493x312`.
+    # Именно эти размеры ожидает мастер установки, поэтому так мы избегаем
+    # растяжения, обрезки и наезда брендовой графики на системный текст.
+
+    # Для верхнего баннера держим левую часть спокойной, потому что WiX
+    # печатает там заголовок и описание шага. Сам логотип уводим вправо.
     magick `
-        -size 370x234 xc:"#10233a" `
-        "$ImageSourcePath" -resize 250x110 `
-        -gravity center -composite `
-        (Join-Path $ResourcesDirectory "WixUIDialogBmp.bmp")
+        -size 493x58 gradient:"#0f2138-#162b46" `
+        -fill "#1e3a5f" -draw "rectangle 336,0 492,57" `
+        "$ImageSourcePath" -resize 132x30^> `
+        -gravity east -geometry +20+0 -composite `
+        -alpha off -type TrueColor `
+        "bmp3:$bannerPath"
+
+    # Для welcome/finish-картинки формируем отдельную левую бренд-зону.
+    # Правая часть остаётся визуально спокойной, чтобы текст мастера
+    # установки NanoDesk читался чисто и не терялся на фоне логотипа.
+    magick `
+        -size 493x312 gradient:"#10233a-#142b46" `
+        -fill "#17395b" -draw "rectangle 0,0 176,311" `
+        -fill "#214b72" -draw "rectangle 176,0 180,311" `
+        "$ImageSourcePath" -resize 138x64^> `
+        -gravity northwest -geometry +20+28 -composite `
+        -alpha off -type TrueColor `
+        "bmp3:$dialogPath"
 }
 
 function Apply-BrandingToSourceTree {
