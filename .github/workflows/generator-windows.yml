@@ -359,29 +359,18 @@ jobs:
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
           
-      - name: magick stuff
+      - name: apply custom branding to source tree
         if: ${{ env.iconlink_url != 'false' }}
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 1
-          max_attempts: 3
-          shell: pwsh
-          command: |
-            Invoke-WebRequest -Uri ${{ env.iconlink_url }}/get_png?filename=${{ env.iconlink_file }}"&"uuid=${{ env.iconlink_uuid }} -OutFile ./res/iconx.png 
-            mv ./res/icon.ico ./res/icon.ico.bak
-            mv ./res/icon.png ./res/icon.png.bak
-            mv ./res/tray-icon.ico ./res/tray-icon.ico.bak
-            mv ./res/iconx.png ./res/icon.png
-            mv ./res/32x32.png ./res/32x32.png.bak
-            mv ./res/64x64.png ./res/64x64.png.bak
-            mv ./res/128x128.png ./res/128x128.png.bak
-            mv ./res/128x128@2x.png ./res/128x128@2x.png.bak
-            magick ./res/icon.png -define icon:auto-resize=256,64,48,32,16 ./res/icon.ico
-            cp ./res/icon.ico ./res/tray-icon.ico
-            magick ./res/icon.png -resize 32x32 ./res/32x32.png
-            magick ./res/icon.png -resize 64x64 ./res/64x64.png
-            magick ./res/icon.png -resize 128x128 ./res/128x128.png
-            magick ./res/128x128.png -resize 200% ./res/128x128@2x.png
+        shell: pwsh
+        run: |
+          .\.github\scripts\apply_windows_branding.ps1 `
+            -RepositoryRoot (Get-Location).Path `
+            -IconBaseUrl '${{ env.iconlink_url }}' `
+            -IconUuid '${{ env.iconlink_uuid }}' `
+            -IconFileName '${{ env.iconlink_file }}' `
+            -LogoBaseUrl '${{ env.logolink_url }}' `
+            -LogoUuid '${{ env.logolink_uuid }}' `
+            -LogoFileName '${{ env.logolink_file }}'
 
 
       - name: ui.rs icon
@@ -493,23 +482,19 @@ jobs:
               Write-Host "Ingore the printer driver error."
           }
 
-      - name: icon stuff
+      - name: apply custom branding to built dist
         if: ${{ env.iconlink_url != 'false' }}
-        continue-on-error: true
+        shell: pwsh
         run: |
-          mv ./rustdesk/data/flutter_assets/assets/icon.svg ./rustdesk/data/flutter_assets/assets/icon.svg.bak
-          magick ./res/icon.png ./rustdesk/data/flutter_assets/assets/icon.svg
-
-      - name: logo stuff
-        if: ${{ env.logolink_url != 'false' }}
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 1
-          max_attempts: 3
-          shell: pwsh
-          continue_on_error: true
-          command: |
-            Invoke-WebRequest -Uri ${{ env.logolink_url }}/get_png?filename=${{ env.logolink_file }}"&"uuid=${{ env.logolink_uuid }} -OutFile ./rustdesk/data/flutter_assets/assets/logo.png
+          .\.github\scripts\apply_windows_branding.ps1 `
+            -RepositoryRoot (Get-Location).Path `
+            -DistDir 'rustdesk' `
+            -IconBaseUrl '${{ env.iconlink_url }}' `
+            -IconUuid '${{ env.iconlink_uuid }}' `
+            -IconFileName '${{ env.iconlink_file }}' `
+            -LogoBaseUrl '${{ env.logolink_url }}' `
+            -LogoUuid '${{ env.logolink_uuid }}' `
+            -LogoFileName '${{ env.logolink_file }}'
 
       - name: find Runner.res
         # Windows: find Runner.res (compiled from ./flutter/windows/runner/Runner.rc), copy to ./Runner.res
