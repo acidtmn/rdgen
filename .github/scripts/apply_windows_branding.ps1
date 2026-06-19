@@ -279,7 +279,7 @@ function New-MsiBitmaps {
             # справа компактный бренд-блок с иконкой, именем и тонким акцентом.
             $bannerGraphics.Clear([System.Drawing.ColorTranslator]::FromHtml("#f7f7f7"))
 
-            $bannerBrandRect = New-DrawingRectangle -X 316 -Y 0 -Width 177 -Height 58
+            $bannerBrandRect = New-DrawingRectangle -X 348 -Y 0 -Width 145 -Height 58
             $bannerGradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
                 $bannerBrandRect,
                 [System.Drawing.ColorTranslator]::FromHtml("#17385f"),
@@ -290,10 +290,10 @@ function New-MsiBitmaps {
             $bannerGradient.Dispose()
 
             $bannerAccentBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml("#2d6fe5"))
-            $bannerGraphics.FillRectangle($bannerAccentBrush, 316, 0, 6, 58)
+            $bannerGraphics.FillRectangle($bannerAccentBrush, 348, 0, 5, 58)
             $bannerAccentBrush.Dispose()
 
-            $bannerCardRect = New-DrawingRectangle -X 330 -Y 9 -Width 152 -Height 40
+            $bannerCardRect = New-DrawingRectangle -X 360 -Y 10 -Width 122 -Height 36
             $bannerCardPath = New-RoundedRectanglePath -Rectangle $bannerCardRect -Radius 8
             $bannerCardBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(28, 255, 255, 255))
             $bannerCardBorder = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(22, 255, 255, 255), 1)
@@ -304,22 +304,22 @@ function New-MsiBitmaps {
             $bannerCardPath.Dispose()
 
             if ($iconImage) {
-                $bannerIconRect = New-DrawingRectangle -X 334 -Y 14 -Width 28 -Height 28
+                $bannerIconRect = New-DrawingRectangle -X 367 -Y 14 -Width 22 -Height 22
                 Draw-ImageCover -Graphics $bannerGraphics -Image $iconImage -DestinationRectangle $bannerIconRect
             }
             elseif ($logoImage) {
-                $bannerIconRect = New-DrawingRectangle -X 334 -Y 14 -Width 28 -Height 28
+                $bannerIconRect = New-DrawingRectangle -X 367 -Y 14 -Width 22 -Height 22
                 Draw-ImageCover -Graphics $bannerGraphics -Image $logoImage -DestinationRectangle $bannerIconRect
             }
 
-            $bannerFont = [System.Drawing.Font]::new("Segoe UI", 17, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+            $bannerFont = [System.Drawing.Font]::new("Segoe UI", 14, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
             $bannerTextBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml("#f6f8ff"))
-            $bannerGraphics.DrawString("NanoDesk", $bannerFont, $bannerTextBrush, 368, 15)
+            $bannerGraphics.DrawString("NanoDesk", $bannerFont, $bannerTextBrush, 396, 13)
             $bannerFont.Dispose()
             $bannerTextBrush.Dispose()
 
             $bannerLinePen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(120, 77, 139, 255), 1)
-            $bannerGraphics.DrawLine($bannerLinePen, 368, 42, 472, 42)
+            $bannerGraphics.DrawLine($bannerLinePen, 396, 36, 472, 36)
             $bannerLinePen.Dispose()
 
             Save-BitmapAsBmp -Bitmap $bannerBitmap -DestinationPath $bannerPath
