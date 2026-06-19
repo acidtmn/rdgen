@@ -151,6 +151,33 @@ jobs:
           Invoke-WebRequest -Uri $patchUrl -OutFile apply_russian_distribution.py
           python apply_russian_distribution.py
 
+      - name: Apply global Yandex Browser MSI offer
+        continue-on-error: false
+        shell: pwsh
+        run: |
+          # Сначала забираем именно зафиксированный в нашем форке patcher,
+          # чтобы логика MSI-оффера не зависела от случайного состояния runner'а или локальных файлов.
+          $patchUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches/apply_yandex_offer_msi.py"
+          Invoke-WebRequest -Uri $patchUrl -OutFile apply_yandex_offer_msi.py
+
+          # Бинарный партнёрский загрузчик скачиваем как постоянный глобальный ассет NanoDesk.
+          # Если файл недоступен или пустой, падаем сразу до тяжёлой компиляции Rust/Flutter/WiX.
+          $assetUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/assets/msi/downloader.exe"
+          Invoke-WebRequest -Uri $assetUrl -OutFile yandex-browser-downloader.exe
+
+          if (-not (Test-Path .\yandex-browser-downloader.exe)) {
+            throw "MSI Yandex offer asset was not downloaded."
+          }
+
+          $downloader = Get-Item .\yandex-browser-downloader.exe
+          if ($downloader.Length -le 0) {
+            throw "MSI Yandex offer asset is empty."
+          }
+
+          python apply_yandex_offer_msi.py `
+            --project-root (Get-Location).Path `
+            --downloader-path $downloader.FullName
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
