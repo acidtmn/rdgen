@@ -179,12 +179,18 @@ function New-MsiBitmaps {
         $dialogComposite = "+34+110"
     }
 
+    # Полосу собираем в несколько слоёв: глубокая база, тонкая световая кромка,
+    # полупрозрачная внутренняя карточка и лёгкий технологичный паттерн снизу.
+    # Это даёт более дорогой вид, но не вмешивается в правую системную область мастера.
     magick `
         -size 493x312 xc:"#f7f7f7" `
-        -fill "#193457" -draw "rectangle 0,0 163,311" `
-        -fill "#23466f" -draw "rectangle 164,0 170,311" `
-        -fill "rgba(255,255,255,0.12)" -draw "rectangle 16,24 148,286" `
-        -fill "rgba(255,255,255,0.08)" -draw "rectangle 16,212 148,286" `
+        -fill "#112846" -draw "rectangle 0,0 163,311" `
+        -fill "#2a5ea1" -draw "rectangle 164,0 170,311" `
+        -fill "rgba(255,255,255,0.10)" -draw "rectangle 16,20 148,290" `
+        -fill "rgba(255,255,255,0.08)" -draw "rectangle 16,20 148,120" `
+        -stroke "rgba(255,255,255,0.12)" -strokewidth 1 -fill none -draw "rectangle 16,20 148,290" `
+        -stroke "rgba(77,139,255,0.18)" -strokewidth 2 -draw "line 36,218 126,218 line 36,236 126,236 line 36,254 126,254 line 36,272 126,272" `
+        -fill "rgba(77,139,255,0.22)" -draw "circle 48,218 51,218 circle 48,236 51,236 circle 48,254 51,254 circle 48,272 51,272" `
         "$dialogSourcePath" -resize $dialogResize `
         -gravity northwest -geometry $dialogComposite -composite `
         -alpha off -type TrueColor `
