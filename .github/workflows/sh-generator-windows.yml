@@ -315,7 +315,11 @@ jobs:
         shell: bash
         run: |
           cp ./src/ui.rs ./src/ui.rs.bak
-          b64=$(base64 -w0 < ./res/icon.png)
+          ui_brand_source="./res/icon.png"
+          if [ -f ./flutter/assets/logo.png ]; then
+            ui_brand_source="./flutter/assets/logo.png"
+          fi
+          b64=$(base64 -w0 < "$ui_brand_source")
           perl -0777 -pe "s|iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHL[A-Za-z0-9+/=]+|$b64|g" -i.bak ./src/ui.rs
           b64=""
 
