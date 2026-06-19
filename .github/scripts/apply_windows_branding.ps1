@@ -45,8 +45,8 @@ function Backup-IfExists {
         [string]$PathToBackup
     )
 
-    # РЎРѕС…СЂР°РЅСЏРµРј РёСЃС…РѕРґРЅС‹Р№ С„Р°Р№Р» С‚РѕР»СЊРєРѕ РѕРґРёРЅ СЂР°Р·, С‡С‚РѕР±С‹ РјРѕР¶РЅРѕ Р±С‹Р»Рѕ СЃРїРѕРєРѕР№РЅРѕ
-    # Р·Р°РїСѓСЃРєР°С‚СЊ СЃРєСЂРёРїС‚ РїРѕРІС‚РѕСЂРЅРѕ Р±РµР· СЂР°Р·РјРЅРѕР¶РµРЅРёСЏ *.bak Рё Р±РµР· С€СѓРјР° РІ СЃР±РѕСЂРєРµ.
+    # Резервную копию исходного файла создаём только один раз, чтобы можно было
+    # спокойно сравнивать результат брендинга без накопления цепочки *.bak.
     if ((Test-Path $PathToBackup) -and -not (Test-Path "$PathToBackup.bak")) {
         Move-Item -LiteralPath $PathToBackup -Destination "$PathToBackup.bak" -Force
     }
@@ -81,8 +81,8 @@ function Download-PngAsset {
 
     Ensure-ParentDirectory -TargetPath $DestinationPath
 
-    # РЇРІРЅРѕ СЃРѕР±РёСЂР°РµРј URL С‡РµСЂРµР· РїР°СЂР°РјРµС‚СЂС‹, С‡С‚РѕР±С‹ РёСЃРєР»СЋС‡РёС‚СЊ РѕС€РёР±РєРё СЃРѕ СЃРєР»РµР№РєРѕР№
-    # СЃС‚СЂРѕРєРё Рё РїРѕР»СѓС‡РёС‚СЊ РїСЂРµРґСЃРєР°Р·СѓРµРјС‹Р№ РїСѓС‚СЊ РґРѕ PNG РЅР° rdgen.
+    # URL собираем через параметры, чтобы не ломаться на пробелах и спецсимволах
+    # в имени файла, которое приходит из интерфейса rdgen.
     $query = "filename=$([System.Uri]::EscapeDataString($FileName))&uuid=$([System.Uri]::EscapeDataString($Uuid))"
     $assetUrl = "$BaseUrl/get_png?$query"
     Invoke-WebRequest -Uri $assetUrl -OutFile $DestinationPath
@@ -122,6 +122,104 @@ function Set-FileFromSource {
     Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
 }
 
+function New-DrawingRectangle {
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$X,
+
+        [Parameter(Mandatory = $true)]
+        [int]$Y,
+
+        [Parameter(Mandatory = $true)]
+        [int]$Width,
+
+        [Parameter(Mandatory = $true)]
+        [int]$Height
+    )
+
+    return [System.Drawing.Rectangle]::new($X, $Y, $Width, $Height)
+}
+
+function New-RoundedRectanglePath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Drawing.Rectangle]$Rectangle,
+
+        [Parameter(Mandatory = $true)]
+        [int]$Radius
+    )
+
+    $diameter = [Math]::Max(2, $Radius * 2)
+    $path = [System.Drawing.Drawing2D.GraphicsPath]::new()
+
+    # Скруглённую карточку собираем вручную, чтобы одинаково использовать её
+    # и в узком баннере, и в вертикальной welcome-полосе MSI.
+    $path.AddArc($Rectangle.X, $Rectangle.Y, $diameter, $diameter, 180, 90)
+    $path.AddArc($Rectangle.Right - $diameter, $Rectangle.Y, $diameter, $diameter, 270, 90)
+    $path.AddArc($Rectangle.Right - $diameter, $Rectangle.Bottom - $diameter, $diameter, $diameter, 0, 90)
+    $path.AddArc($Rectangle.X, $Rectangle.Bottom - $diameter, $diameter, $diameter, 90, 90)
+    $path.CloseFigure()
+
+    return $path
+}
+
+function Set-HighQualityGraphics {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Drawing.Graphics]$Graphics
+    )
+
+    # Включаем качественный рендер, потому что WiX принимает только BMP, а значит
+    # сглаживание и ресемплинг нужно контролировать на нашей стороне.
+    $Graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $Graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $Graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    $Graphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
+    $Graphics.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::ClearTypeGridFit
+}
+
+function Draw-ImageCover {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Drawing.Graphics]$Graphics,
+
+        [Parameter(Mandatory = $true)]
+        [System.Drawing.Image]$Image,
+
+        [Parameter(Mandatory = $true)]
+        [System.Drawing.Rectangle]$DestinationRectangle
+    )
+
+    # Режим cover не даёт логотипу или иконке растягиваться на весь фон, а вместо этого
+    # аккуратно вписывает исходное изображение в заданную область.
+    $scale = [Math]::Max(
+        $DestinationRectangle.Width / [double]$Image.Width,
+        $DestinationRectangle.Height / [double]$Image.Height
+    )
+
+    $sourceWidth = [Math]::Min($Image.Width, [int][Math]::Round($DestinationRectangle.Width / $scale))
+    $sourceHeight = [Math]::Min($Image.Height, [int][Math]::Round($DestinationRectangle.Height / $scale))
+    $sourceX = [int][Math]::Max(0, [Math]::Round(($Image.Width - $sourceWidth) / 2))
+    $sourceY = [int][Math]::Max(0, [Math]::Round(($Image.Height - $sourceHeight) / 2))
+    $sourceRectangle = [System.Drawing.Rectangle]::new($sourceX, $sourceY, $sourceWidth, $sourceHeight)
+
+    $Graphics.DrawImage($Image, $DestinationRectangle, $sourceRectangle, [System.Drawing.GraphicsUnit]::Pixel)
+}
+
+function Save-BitmapAsBmp {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Drawing.Bitmap]$Bitmap,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DestinationPath
+    )
+
+    Ensure-ParentDirectory -TargetPath $DestinationPath
+    Backup-IfExists -PathToBackup $DestinationPath
+    $Bitmap.Save($DestinationPath, [System.Drawing.Imaging.ImageFormat]::Bmp)
+}
+
 function New-MsiBitmaps {
     param(
         [Parameter(Mandatory = $true)]
@@ -136,87 +234,201 @@ function New-MsiBitmaps {
 
     Ensure-ParentDirectory -TargetPath (Join-Path $ResourcesDirectory "placeholder.tmp")
 
-    # WiX РїРѕРґС…РІР°С‚С‹РІР°РµС‚ РєР°СЃС‚РѕРјРЅС‹Рµ bitmap-СЂРµСЃСѓСЂСЃС‹ С‚РѕР»СЊРєРѕ РµСЃР»Рё РѕРЅРё СЂРµР°Р»СЊРЅРѕ Р»РµР¶Р°С‚
-    # РІ РєР°С‚Р°Р»РѕРіРµ Package/Resources, РїРѕСЌС‚РѕРјСѓ СЃРѕР·РґР°С‘Рј РѕР±Рµ СЃС‚Р°РЅРґР°СЂС‚РЅС‹Рµ РєР°СЂС‚РёРЅРєРё
-    # СѓСЃС‚Р°РЅРѕРІС‰РёРєР° РёР· РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРѕРіРѕ Р»РѕРіРѕС‚РёРїР°.
     $bannerPath = Join-Path $ResourcesDirectory "WixUIBannerBmp.bmp"
     $dialogPath = Join-Path $ResourcesDirectory "WixUIDialogBmp.bmp"
 
-    # Р Р°Р·РјРµСЂС‹ Р±РµСЂС‘Рј РёР· РґРѕРєСѓРјРµРЅС‚Р°С†РёРё WiX/WixUI:
-    # `WixUIBannerBmp` РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ `493x58`, Р° `WixUIDialogBmp` РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ `493x312`.
-    # РРјРµРЅРЅРѕ СЌС‚Рё СЂР°Р·РјРµСЂС‹ РѕР¶РёРґР°РµС‚ РјР°СЃС‚РµСЂ СѓСЃС‚Р°РЅРѕРІРєРё, РїРѕСЌС‚РѕРјСѓ С‚Р°Рє РјС‹ РёР·Р±РµРіР°РµРј
-    # СЂР°СЃС‚СЏР¶РµРЅРёСЏ, РѕР±СЂРµР·РєРё Рё РЅР°РµР·РґР° Р±СЂРµРЅРґРѕРІРѕР№ РіСЂР°С„РёРєРё РЅР° СЃРёСЃС‚РµРјРЅС‹Р№ С‚РµРєСЃС‚.
+    Add-Type -AssemblyName System.Drawing
 
-    # Р”Р»СЏ РІРµСЂС…РЅРµРіРѕ Р±Р°РЅРЅРµСЂР° Р±РѕР»СЊС€Рµ РЅРµ РІСЃС‚Р°РІР»СЏРµРј С€РёСЂРѕРєРёР№ Р»РѕРіРѕС‚РёРї РєР°Рє РµСЃС‚СЊ,
-    # РїРѕС‚РѕРјСѓ С‡С‚Рѕ РЅР° РІС‹СЃРѕС‚Рµ 58px РѕРЅ Р»РµРіРєРѕ РѕР±СЂРµР·Р°РµС‚СЃСЏ Рё РІС‹РіР»СЏРґРёС‚ В«РєСЂРёРІРѕВ».
-    # Р’РјРµСЃС‚Рѕ СЌС‚РѕРіРѕ СЃРѕР±РёСЂР°РµРј РєРѕРјРїР°РєС‚РЅС‹Р№ header: СЃР»РµРІР° СЃРІРµС‚Р»Р°СЏ СЃРёСЃС‚РµРјРЅР°СЏ Р·РѕРЅР°,
-    # Р° СЃРїСЂР°РІР° РЅРµР±РѕР»СЊС€РѕР№ С„РёСЂРјРµРЅРЅС‹Р№ Р±Р»РѕРє СЃ РёРєРѕРЅРєРѕР№ Рё РЅР°Р·РІР°РЅРёРµРј РїСЂРѕРґСѓРєС‚Р°.
+    # Для баннера и welcome-полосы отдельно определяем, чем именно рисовать бренд:
+    # иконка приоритетна как главный квадратный знак, а логотип остаётся запасным источником.
+    $resolvedIconPath = ""
     if ($IconSourcePath -and (Test-Path $IconSourcePath)) {
-        magick `
-            -size 493x58 xc:"#f7f7f7" `
-            -fill "#13345a" -draw "rectangle 316,0 492,57" `
-            -fill "#2d6fe5" -draw "rectangle 316,0 321,57" `
-            -fill "rgba(255,255,255,0.08)" -draw "rectangle 330,9 482,48" `
-            "$IconSourcePath" -resize 28x28^> `
-            -gravity northwest -geometry +332+14 -composite `
-            -font "Segoe UI" -fill "#f6f8ff" -pointsize 18 -gravity northwest -annotate +368+18 "NanoDesk" `
-            -stroke "rgba(77,139,255,0.45)" -strokewidth 1 -draw "line 368,42 472,42" `
-            -alpha off -type TrueColor `
-            "bmp3:$bannerPath"
+        $resolvedIconPath = $IconSourcePath
     }
-    else {
-        # Р•СЃР»Рё РёРєРѕРЅРєР° РЅРµРґРѕСЃС‚СѓРїРЅР°, РёСЃРїРѕР»СЊР·СѓРµРј Р±РµР·РѕРїР°СЃРЅС‹Р№ fallback:
-        # РїРѕРјРµС‰Р°РµРј С€РёСЂРѕРєРёР№ Р»РѕРіРѕС‚РёРї С‚РѕР»СЊРєРѕ РІ РїСЂР°РІСѓСЋ Р±СЂРµРЅРґ-Р·РѕРЅСѓ Рё РЅРµ РґР°С‘Рј
-        # РµРјСѓ Р·Р°Р»РµР·Р°С‚СЊ РІ СЃРёСЃС‚РµРјРЅСѓСЋ С‡Р°СЃС‚СЊ Р±Р°РЅРЅРµСЂР°.
-        magick `
-            -size 493x58 xc:"#f7f7f7" `
-            -fill "#13345a" -draw "rectangle 316,0 492,57" `
-            -fill "#2d6fe5" -draw "rectangle 316,0 321,57" `
-            "$LogoSourcePath" -resize 120x24^> `
-            -gravity east -geometry +12+0 -composite `
-            -alpha off -type TrueColor `
-            "bmp3:$bannerPath"
+    elseif ($LogoSourcePath -and (Test-Path $LogoSourcePath)) {
+        $resolvedIconPath = $LogoSourcePath
     }
 
-    # Р”Р»СЏ welcome/finish/license-С„РѕРЅР° Р±РѕР»СЊС€Рµ РЅРµ РёСЃРїРѕР»СЊР·СѓРµРј С€РёСЂРѕРєРёР№ Р»РѕРіРѕС‚РёРї РєР°Рє
-    # РїРѕР»РЅРѕС†РµРЅРЅС‹Р№ С„РѕРЅ: РёР·-Р·Р° РїСЂРѕР·СЂР°С‡РЅРѕРіРѕ РїРѕР»РѕС‚РЅР° Рё РєСЂСѓРїРЅРѕРіРѕ wordmark РѕРЅ РІРёР·СѓР°Р»СЊРЅРѕ
-    # СЂР°СЃС‚СЏРіРёРІР°РµС‚СЃСЏ РЅР° РІСЃСЋ Р·РѕРЅСѓ РјР°СЃС‚РµСЂР° Рё Р»РµР·РµС‚ РїРѕРґ СЃРёСЃС‚РµРјРЅС‹Р№ С‚РµРєСЃС‚.
-    #
-    # Р’РѕР·РІСЂР°С‰Р°РµРјСЃСЏ Рє Р»РѕРіРёРєРµ, РјР°РєСЃРёРјР°Р»СЊРЅРѕ РїРѕС…РѕР¶РµР№ РЅР° СЃС‚Р°РЅРґР°СЂС‚РЅС‹Р№ MSI-РјР°СЃС‚РµСЂ:
-    # СЃР»РµРІР° СѓР·РєР°СЏ Р±СЂРµРЅРґ-РїРѕР»РѕСЃР°, Р° СЃРїСЂР°РІР° СЃРІРµС‚Р»Р°СЏ СЃРїРѕРєРѕР№РЅР°СЏ РѕР±Р»Р°СЃС‚СЊ РїРѕРґ СЃРёСЃС‚РµРјРЅС‹Р№
-    # С‚РµРєСЃС‚. РўР°Рє РјР°СЃС‚РµСЂ РІС‹РіР»СЏРґРёС‚ РїСЂРёРІС‹С‡РЅРѕ, Р° Р±СЂРµРЅРґ РѕСЃС‚Р°С‘С‚СЃСЏ Р°РєРєСѓСЂР°С‚РЅС‹Рј Р°РєС†РµРЅС‚РѕРј,
-    # Р° РЅРµ С„РѕРЅРѕРІС‹Рј РёР·РѕР±СЂР°Р¶РµРЅРёРµРј.
-    $dialogSourcePath = $LogoSourcePath
-    $dialogResize = "120x54^>"
-    $dialogComposite = "+24+104"
-
-    if ($IconSourcePath -and (Test-Path $IconSourcePath)) {
-        # Квадратная иконка лучше подходит для левой welcome-полосы:
-        # она даёт чистый бренд-якорь и не превращается в растянутый фон.
-        $dialogSourcePath = $IconSourcePath
-        $dialogResize = "92x92^>"
-        $dialogComposite = "+34+110"
+    $resolvedLogoPath = ""
+    if ($LogoSourcePath -and (Test-Path $LogoSourcePath)) {
+        $resolvedLogoPath = $LogoSourcePath
+    }
+    elseif ($resolvedIconPath) {
+        $resolvedLogoPath = $resolvedIconPath
     }
 
-    # Полосу собираем как фирменную premium-tech зону: глубокая база, мягкий
-    # фиолетово-синий glow, заметная иконка и только имя продукта без слоганов.
-    # Так welcome-экран выглядит законченным, но не перегружается текстом.
-    magick `
-        -size 493x312 xc:"#f7f7f7" `
-        -fill "#112846" -draw "rectangle 0,0 163,311" `
-        -fill "#2a5ea1" -draw "rectangle 164,0 170,311" `
-        -fill "rgba(255,255,255,0.10)" -draw "rectangle 16,20 148,290" `
-        -fill "rgba(255,255,255,0.10)" -draw "rectangle 16,20 148,138" `
-        -fill "rgba(128,86,255,0.10)" -draw "rectangle 18,22 146,140" `
-        -stroke "rgba(255,255,255,0.12)" -strokewidth 1 -fill none -draw "rectangle 16,20 148,290" `
-        -stroke "rgba(120,88,255,0.16)" -strokewidth 2 -draw "line 24,146 140,146" `
-        -stroke "rgba(77,139,255,0.22)" -strokewidth 2 -draw "line 34,226 128,226 line 34,244 128,244 line 34,262 128,262 line 34,280 128,280" `
-        -fill "rgba(77,139,255,0.28)" -draw "circle 46,226 49,226 circle 46,244 49,244 circle 46,262 49,262 circle 46,280 49,280" `
-        "$dialogSourcePath" -resize $dialogResize `
-        -gravity northwest -geometry $dialogComposite -composite `
-        -font "Segoe UI" -fill "#f6f8ff" -pointsize 20 -gravity northwest -annotate +31+167 "NanoDesk" `
-        -alpha off -type TrueColor `
-        "bmp3:$dialogPath"
+    $iconImage = $null
+    $logoImage = $null
+
+    try {
+        if ($resolvedIconPath) {
+            $iconImage = [System.Drawing.Image]::FromFile($resolvedIconPath)
+        }
+
+        if ($resolvedLogoPath) {
+            $logoImage = [System.Drawing.Image]::FromFile($resolvedLogoPath)
+        }
+
+        $bannerBitmap = [System.Drawing.Bitmap]::new(493, 58)
+        $bannerGraphics = [System.Drawing.Graphics]::FromImage($bannerBitmap)
+
+        try {
+            Set-HighQualityGraphics -Graphics $bannerGraphics
+
+            # Верхний баннер оставляем безопасным для MSI: слева светлая служебная зона,
+            # справа компактный бренд-блок с иконкой, именем и тонким акцентом.
+            $bannerGraphics.Clear([System.Drawing.ColorTranslator]::FromHtml("#f7f7f7"))
+
+            $bannerBrandRect = New-DrawingRectangle -X 316 -Y 0 -Width 177 -Height 58
+            $bannerGradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+                $bannerBrandRect,
+                [System.Drawing.ColorTranslator]::FromHtml("#17385f"),
+                [System.Drawing.ColorTranslator]::FromHtml("#102947"),
+                0
+            )
+            $bannerGraphics.FillRectangle($bannerGradient, $bannerBrandRect)
+            $bannerGradient.Dispose()
+
+            $bannerAccentBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml("#2d6fe5"))
+            $bannerGraphics.FillRectangle($bannerAccentBrush, 316, 0, 6, 58)
+            $bannerAccentBrush.Dispose()
+
+            $bannerCardRect = New-DrawingRectangle -X 330 -Y 9 -Width 152 -Height 40
+            $bannerCardPath = New-RoundedRectanglePath -Rectangle $bannerCardRect -Radius 8
+            $bannerCardBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(28, 255, 255, 255))
+            $bannerCardBorder = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(22, 255, 255, 255), 1)
+            $bannerGraphics.FillPath($bannerCardBrush, $bannerCardPath)
+            $bannerGraphics.DrawPath($bannerCardBorder, $bannerCardPath)
+            $bannerCardBrush.Dispose()
+            $bannerCardBorder.Dispose()
+            $bannerCardPath.Dispose()
+
+            if ($iconImage) {
+                $bannerIconRect = New-DrawingRectangle -X 334 -Y 14 -Width 28 -Height 28
+                Draw-ImageCover -Graphics $bannerGraphics -Image $iconImage -DestinationRectangle $bannerIconRect
+            }
+            elseif ($logoImage) {
+                $bannerIconRect = New-DrawingRectangle -X 334 -Y 14 -Width 28 -Height 28
+                Draw-ImageCover -Graphics $bannerGraphics -Image $logoImage -DestinationRectangle $bannerIconRect
+            }
+
+            $bannerFont = [System.Drawing.Font]::new("Segoe UI", 17, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+            $bannerTextBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml("#f6f8ff"))
+            $bannerGraphics.DrawString("NanoDesk", $bannerFont, $bannerTextBrush, 368, 15)
+            $bannerFont.Dispose()
+            $bannerTextBrush.Dispose()
+
+            $bannerLinePen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(120, 77, 139, 255), 1)
+            $bannerGraphics.DrawLine($bannerLinePen, 368, 42, 472, 42)
+            $bannerLinePen.Dispose()
+
+            Save-BitmapAsBmp -Bitmap $bannerBitmap -DestinationPath $bannerPath
+        }
+        finally {
+            $bannerGraphics.Dispose()
+            $bannerBitmap.Dispose()
+        }
+
+        $dialogBitmap = [System.Drawing.Bitmap]::new(493, 312)
+        $dialogGraphics = [System.Drawing.Graphics]::FromImage($dialogBitmap)
+
+        try {
+            Set-HighQualityGraphics -Graphics $dialogGraphics
+
+            # Welcome/finish-экран оформляем только слева, чтобы правая штатная область MSI
+            # оставалась полностью читаемой и бренд не спорил с системным текстом.
+            $dialogGraphics.Clear([System.Drawing.ColorTranslator]::FromHtml("#f7f7f7"))
+
+            $sidebarRect = New-DrawingRectangle -X 0 -Y 0 -Width 163 -Height 312
+            $sidebarGradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+                $sidebarRect,
+                [System.Drawing.ColorTranslator]::FromHtml("#17385f"),
+                [System.Drawing.ColorTranslator]::FromHtml("#102743"),
+                90
+            )
+            $dialogGraphics.FillRectangle($sidebarGradient, $sidebarRect)
+            $sidebarGradient.Dispose()
+
+            $sidebarAccentBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml("#2d6fe5"))
+            $dialogGraphics.FillRectangle($sidebarAccentBrush, 163, 0, 7, 312)
+            $sidebarAccentBrush.Dispose()
+
+            $glowBrush = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+                [System.Drawing.Rectangle]::new(118, 0, 52, 312),
+                [System.Drawing.Color]::FromArgb(0, 77, 139, 255),
+                [System.Drawing.Color]::FromArgb(110, 77, 139, 255),
+                0
+            )
+            $dialogGraphics.FillRectangle($glowBrush, 118, 0, 52, 312)
+            $glowBrush.Dispose()
+
+            $panelRect = New-DrawingRectangle -X 16 -Y 20 -Width 132 -Height 270
+            $panelPath = New-RoundedRectanglePath -Rectangle $panelRect -Radius 14
+            $panelBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(26, 255, 255, 255))
+            $panelBorder = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(22, 255, 255, 255), 1)
+            $dialogGraphics.FillPath($panelBrush, $panelPath)
+            $dialogGraphics.DrawPath($panelBorder, $panelPath)
+            $panelBrush.Dispose()
+            $panelBorder.Dispose()
+            $panelPath.Dispose()
+
+            $topCardRect = New-DrawingRectangle -X 28 -Y 34 -Width 108 -Height 96
+            $topCardPath = New-RoundedRectanglePath -Rectangle $topCardRect -Radius 12
+            $topCardGradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+                $topCardRect,
+                [System.Drawing.Color]::FromArgb(54, 255, 255, 255),
+                [System.Drawing.Color]::FromArgb(24, 128, 86, 255),
+                90
+            )
+            $dialogGraphics.FillPath($topCardGradient, $topCardPath)
+            $topCardGradient.Dispose()
+            $topCardPath.Dispose()
+
+            if ($iconImage) {
+                $dialogIconRect = New-DrawingRectangle -X 34 -Y 44 -Width 92 -Height 92
+                Draw-ImageCover -Graphics $dialogGraphics -Image $iconImage -DestinationRectangle $dialogIconRect
+            }
+            elseif ($logoImage) {
+                $dialogLogoRect = New-DrawingRectangle -X 30 -Y 52 -Width 104 -Height 72
+                Draw-ImageCover -Graphics $dialogGraphics -Image $logoImage -DestinationRectangle $dialogLogoRect
+            }
+
+            $dialogFont = [System.Drawing.Font]::new("Segoe UI", 20, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+            $dialogTextBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml("#f6f8ff"))
+            $dialogGraphics.DrawString("NanoDesk", $dialogFont, $dialogTextBrush, 28, 164)
+            $dialogFont.Dispose()
+            $dialogTextBrush.Dispose()
+
+            $dividerPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(44, 120, 88, 255), 2)
+            $dialogGraphics.DrawLine($dividerPen, 24, 200, 140, 200)
+            $dividerPen.Dispose()
+
+            $patternPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(46, 77, 139, 255), 2)
+            $patternDotBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(72, 77, 139, 255))
+            foreach ($lineY in @(226, 244, 262, 280)) {
+                # Нижний тех-паттерн добавляет стиль полосе, но не превращает её в тяжёлый постер.
+                $dialogGraphics.DrawLine($patternPen, 36, $lineY, 128, $lineY)
+                $dialogGraphics.FillEllipse($patternDotBrush, 28, $lineY - 3, 6, 6)
+            }
+            $patternPen.Dispose()
+            $patternDotBrush.Dispose()
+
+            Save-BitmapAsBmp -Bitmap $dialogBitmap -DestinationPath $dialogPath
+        }
+        finally {
+            $dialogGraphics.Dispose()
+            $dialogBitmap.Dispose()
+        }
+    }
+    finally {
+        if ($iconImage) {
+            $iconImage.Dispose()
+        }
+
+        if ($logoImage) {
+            $logoImage.Dispose()
+        }
+    }
 }
 
 function Apply-BrandingToSourceTree {
@@ -240,6 +452,8 @@ function Apply-BrandingToSourceTree {
         $icon128 = Get-NormalizedPath -BasePath $RootPath -RelativePath "res/128x128.png"
         $icon128x2 = Get-NormalizedPath -BasePath $RootPath -RelativePath "res/128x128@2x.png"
 
+        # Исходный icon.png остаётся главным квадратным брендовым ассетом, поэтому
+        # обновляем из него все платформенные производные файлы проекта.
         Set-FileFromSource -SourcePath $DownloadedIconPath -DestinationPath $resIconPng
         Backup-IfExists -PathToBackup $resIconIco
         Backup-IfExists -PathToBackup $trayIconIco
@@ -284,6 +498,8 @@ function Apply-BrandingToSourceTree {
 
         $msiResourcesDir = Get-NormalizedPath -BasePath $RootPath -RelativePath "res/msi/Package/Resources"
         if (Test-Path (Split-Path $msiResourcesDir -Parent)) {
+            # MSI-ресурсы строим отдельным рендером, а не просто копированием logo.png,
+            # иначе WiX снова начнёт растягивать бренд в неподходящий формат.
             New-MsiBitmaps -LogoSourcePath $DownloadedLogoPath -IconSourcePath $DownloadedIconPath -ResourcesDirectory $msiResourcesDir
         }
     }
