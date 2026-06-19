@@ -2,6 +2,9 @@ from dataclasses import dataclass
 import os
 from urllib.parse import urlsplit
 
+OFFICIAL_HOMEPAGE_URL = "https://nanodesk.ru"
+OFFICIAL_PRIVACY_URL = "https://nanodesk.ru/privacy"
+
 
 @dataclass(frozen=True)
 class RussianDistributionDefaults:
@@ -18,7 +21,7 @@ class RussianDistributionHelper:
     def normalize_homepage_url(homepage_url: str) -> str:
         normalized = (homepage_url or "").strip()
         if not normalized:
-            return "https://nanodesk.ru"
+            return OFFICIAL_HOMEPAGE_URL
 
         lowered = normalized.lower().rstrip("/")
         if lowered in {
@@ -29,7 +32,7 @@ class RussianDistributionHelper:
             "nanodesk",
             "nanodesk.",
         }:
-            return "https://nanodesk.ru"
+            return OFFICIAL_HOMEPAGE_URL
 
         if "://" not in normalized:
             normalized = f"https://{normalized}"
@@ -37,7 +40,7 @@ class RussianDistributionHelper:
         parsed = urlsplit(normalized)
         hostname = (parsed.hostname or "").lower().rstrip(".")
         if hostname == "nanodesk":
-            return "https://nanodesk.ru"
+            return OFFICIAL_HOMEPAGE_URL
 
         return normalized
 
@@ -46,13 +49,14 @@ class RussianDistributionHelper:
         homepage_url = RussianDistributionHelper.normalize_homepage_url(
             os.environ.get(
                 "RD_DEFAULT_HOMEPAGE_URL",
-                "https://nanodesk.ru",
+                OFFICIAL_HOMEPAGE_URL,
             )
         )
-        genurl = os.environ.get("GENURL", "").rstrip("/")
         privacy_url = os.environ.get("RD_DEFAULT_PRIVACY_URL")
         if not privacy_url:
-            privacy_url = f"{genurl}/privacy.html" if genurl else "https://rdgen.nanodesk.ru/privacy.html"
+            # Для пользовательских сборок по умолчанию всегда ведём на официальный privacy-раздел,
+            # чтобы установщик и форма генератора не расходились по ссылкам между собой.
+            privacy_url = OFFICIAL_PRIVACY_URL
 
         # Собираем все региональные значения в одном helper, чтобы контроллеры и формы
         # получали уже готовые значения по умолчанию и не дублировали RF-логику.

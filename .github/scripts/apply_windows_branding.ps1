@@ -45,8 +45,8 @@ function Backup-IfExists {
         [string]$PathToBackup
     )
 
-    # Резервную копию исходного файла создаём только один раз, чтобы можно было
-    # спокойно сравнивать результат брендинга без накопления цепочки *.bak.
+    # Резервную копию создаём только один раз, чтобы повторные прогоны брендинга
+    # не засоряли дерево сборки каскадом лишних *.bak-файлов.
     if ((Test-Path $PathToBackup) -and -not (Test-Path "$PathToBackup.bak")) {
         Move-Item -LiteralPath $PathToBackup -Destination "$PathToBackup.bak" -Force
     }
@@ -81,8 +81,8 @@ function Download-PngAsset {
 
     Ensure-ParentDirectory -TargetPath $DestinationPath
 
-    # URL собираем через параметры, чтобы не ломаться на пробелах и спецсимволах
-    # в имени файла, которое приходит из интерфейса rdgen.
+    # URL собираем через параметры, чтобы корректно переживать пробелы и спецсимволы
+    # в имени загружаемого файла, который пришёл из интерфейса генератора.
     $query = "filename=$([System.Uri]::EscapeDataString($FileName))&uuid=$([System.Uri]::EscapeDataString($Uuid))"
     $assetUrl = "$BaseUrl/get_png?$query"
     Invoke-WebRequest -Uri $assetUrl -OutFile $DestinationPath
@@ -140,37 +140,14 @@ function New-DrawingRectangle {
     return [System.Drawing.Rectangle]::new($X, $Y, $Width, $Height)
 }
 
-function New-RoundedRectanglePath {
-    param(
-        [Parameter(Mandatory = $true)]
-        [System.Drawing.Rectangle]$Rectangle,
-
-        [Parameter(Mandatory = $true)]
-        [int]$Radius
-    )
-
-    $diameter = [Math]::Max(2, $Radius * 2)
-    $path = [System.Drawing.Drawing2D.GraphicsPath]::new()
-
-    # Скруглённую карточку собираем вручную, чтобы одинаково использовать её
-    # и в узком баннере, и в вертикальной welcome-полосе MSI.
-    $path.AddArc($Rectangle.X, $Rectangle.Y, $diameter, $diameter, 180, 90)
-    $path.AddArc($Rectangle.Right - $diameter, $Rectangle.Y, $diameter, $diameter, 270, 90)
-    $path.AddArc($Rectangle.Right - $diameter, $Rectangle.Bottom - $diameter, $diameter, $diameter, 0, 90)
-    $path.AddArc($Rectangle.X, $Rectangle.Bottom - $diameter, $diameter, $diameter, 90, 90)
-    $path.CloseFigure()
-
-    return $path
-}
-
 function Set-HighQualityGraphics {
     param(
         [Parameter(Mandatory = $true)]
         [System.Drawing.Graphics]$Graphics
     )
 
-    # Включаем качественный рендер, потому что WiX принимает только BMP, а значит
-    # сглаживание и ресемплинг нужно контролировать на нашей стороне.
+    # BMP для WiX очень примитивен, поэтому качество масштабирования и текста
+    # нужно заранее настроить на нашей стороне, пока изображение ещё рендерится.
     $Graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $Graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
     $Graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
@@ -190,8 +167,8 @@ function Draw-ImageCover {
         [System.Drawing.Rectangle]$DestinationRectangle
     )
 
-    # Режим cover не даёт логотипу или иконке растягиваться на весь фон, а вместо этого
-    # аккуратно вписывает исходное изображение в заданную область.
+    # Режим cover нужен для квадратной иконки: она аккуратно встаёт в заданную область
+    # без растягивания на весь фон и без пустых полос вокруг.
     $scale = [Math]::Max(
         $DestinationRectangle.Width / [double]$Image.Width,
         $DestinationRectangle.Height / [double]$Image.Height
@@ -239,8 +216,8 @@ function New-MsiBitmaps {
 
     Add-Type -AssemblyName System.Drawing
 
-    # Для баннера и welcome-полосы отдельно определяем, чем именно рисовать бренд:
-    # иконка приоритетна как главный квадратный знак, а логотип остаётся запасным источником.
+    # Для MSI-элементов держим приоритет на icon.png, потому что это компактный квадратный знак,
+    # который лучше всего подходит и для узкого баннера, и для левой welcome-колонки.
     $resolvedIconPath = ""
     if ($IconSourcePath -and (Test-Path $IconSourcePath)) {
         $resolvedIconPath = $IconSourcePath
@@ -275,52 +252,33 @@ function New-MsiBitmaps {
         try {
             Set-HighQualityGraphics -Graphics $bannerGraphics
 
-            # Верхний баннер оставляем безопасным для MSI: слева светлая служебная зона,
-            # справа компактный бренд-блок с иконкой, именем и тонким акцентом.
-            $bannerGraphics.Clear([System.Drawing.ColorTranslator]::FromHtml("#f7f7f7"))
+            # Верхний баннер делаем в белой корпоративной стилистике:
+            # мастер остаётся визуально чистым, а бренд живёт только в правом углу.
+            $bannerGraphics.Clear([System.Drawing.ColorTranslator]::FromHtml("#ffffff"))
 
-            $bannerBrandRect = New-DrawingRectangle -X 348 -Y 0 -Width 145 -Height 58
-            $bannerGradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
-                $bannerBrandRect,
-                [System.Drawing.ColorTranslator]::FromHtml("#17385f"),
-                [System.Drawing.ColorTranslator]::FromHtml("#102947"),
-                0
-            )
-            $bannerGraphics.FillRectangle($bannerGradient, $bannerBrandRect)
-            $bannerGradient.Dispose()
-
-            $bannerAccentBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml("#2d6fe5"))
-            $bannerGraphics.FillRectangle($bannerAccentBrush, 348, 0, 5, 58)
-            $bannerAccentBrush.Dispose()
-
-            $bannerCardRect = New-DrawingRectangle -X 360 -Y 10 -Width 122 -Height 36
-            $bannerCardPath = New-RoundedRectanglePath -Rectangle $bannerCardRect -Radius 8
-            $bannerCardBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(28, 255, 255, 255))
-            $bannerCardBorder = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(22, 255, 255, 255), 1)
-            $bannerGraphics.FillPath($bannerCardBrush, $bannerCardPath)
-            $bannerGraphics.DrawPath($bannerCardBorder, $bannerCardPath)
-            $bannerCardBrush.Dispose()
-            $bannerCardBorder.Dispose()
-            $bannerCardPath.Dispose()
+            $bannerDividerPen = [System.Drawing.Pen]::new([System.Drawing.ColorTranslator]::FromHtml("#d9dde6"), 1)
+            $bannerGraphics.DrawLine($bannerDividerPen, 0, 57, 492, 57)
+            $bannerDividerPen.Dispose()
 
             if ($iconImage) {
-                $bannerIconRect = New-DrawingRectangle -X 367 -Y 14 -Width 22 -Height 22
+                $bannerIconRect = New-DrawingRectangle -X 444 -Y 12 -Width 28 -Height 28
                 Draw-ImageCover -Graphics $bannerGraphics -Image $iconImage -DestinationRectangle $bannerIconRect
             }
             elseif ($logoImage) {
-                $bannerIconRect = New-DrawingRectangle -X 367 -Y 14 -Width 22 -Height 22
+                $bannerIconRect = New-DrawingRectangle -X 444 -Y 12 -Width 28 -Height 28
                 Draw-ImageCover -Graphics $bannerGraphics -Image $logoImage -DestinationRectangle $bannerIconRect
             }
 
-            $bannerFont = [System.Drawing.Font]::new("Segoe UI", 14, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-            $bannerTextBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml("#f6f8ff"))
-            $bannerGraphics.DrawString("NanoDesk", $bannerFont, $bannerTextBrush, 396, 13)
-            $bannerFont.Dispose()
-            $bannerTextBrush.Dispose()
+            $bannerBrandTextFont = [System.Drawing.Font]::new("Segoe UI", 10, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+            $bannerBrandTextBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml("#2f3542"))
+            $bannerGraphics.DrawString("NanoDesk", $bannerBrandTextFont, $bannerBrandTextBrush, 390, 18)
+            $bannerBrandTextFont.Dispose()
+            $bannerBrandTextBrush.Dispose()
 
-            $bannerLinePen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(120, 77, 139, 255), 1)
-            $bannerGraphics.DrawLine($bannerLinePen, 396, 36, 472, 36)
-            $bannerLinePen.Dispose()
+            # Тонкая фиолетовая линия даёт фирменный акцент, но не превращает баннер в тяжёлую плашку.
+            $bannerAccentPen = [System.Drawing.Pen]::new([System.Drawing.ColorTranslator]::FromHtml("#6b3dff"), 1)
+            $bannerGraphics.DrawLine($bannerAccentPen, 390, 38, 436, 38)
+            $bannerAccentPen.Dispose()
 
             Save-BitmapAsBmp -Bitmap $bannerBitmap -DestinationPath $bannerPath
         }
@@ -335,83 +293,32 @@ function New-MsiBitmaps {
         try {
             Set-HighQualityGraphics -Graphics $dialogGraphics
 
-            # Welcome/finish-экран оформляем только слева, чтобы правая штатная область MSI
-            # оставалась полностью читаемой и бренд не спорил с системным текстом.
-            $dialogGraphics.Clear([System.Drawing.ColorTranslator]::FromHtml("#f7f7f7"))
+            # Welcome/finish-экран делаем ближе к mature software installer:
+            # светлая колонка слева, тонкий вертикальный разделитель и компактный логотип с именем.
+            $dialogGraphics.Clear([System.Drawing.ColorTranslator]::FromHtml("#ffffff"))
 
-            $sidebarRect = New-DrawingRectangle -X 0 -Y 0 -Width 163 -Height 312
-            $sidebarGradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
-                $sidebarRect,
-                [System.Drawing.ColorTranslator]::FromHtml("#17385f"),
-                [System.Drawing.ColorTranslator]::FromHtml("#102743"),
-                90
-            )
-            $dialogGraphics.FillRectangle($sidebarGradient, $sidebarRect)
-            $sidebarGradient.Dispose()
+            $sidebarBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml("#f5f6f8"))
+            $dialogGraphics.FillRectangle($sidebarBrush, 0, 0, 163, 312)
+            $sidebarBrush.Dispose()
 
-            $sidebarAccentBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml("#2d6fe5"))
-            $dialogGraphics.FillRectangle($sidebarAccentBrush, 163, 0, 7, 312)
-            $sidebarAccentBrush.Dispose()
-
-            $glowBrush = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
-                [System.Drawing.Rectangle]::new(118, 0, 52, 312),
-                [System.Drawing.Color]::FromArgb(0, 77, 139, 255),
-                [System.Drawing.Color]::FromArgb(110, 77, 139, 255),
-                0
-            )
-            $dialogGraphics.FillRectangle($glowBrush, 118, 0, 52, 312)
-            $glowBrush.Dispose()
-
-            $panelRect = New-DrawingRectangle -X 16 -Y 20 -Width 132 -Height 270
-            $panelPath = New-RoundedRectanglePath -Rectangle $panelRect -Radius 14
-            $panelBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(26, 255, 255, 255))
-            $panelBorder = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(22, 255, 255, 255), 1)
-            $dialogGraphics.FillPath($panelBrush, $panelPath)
-            $dialogGraphics.DrawPath($panelBorder, $panelPath)
-            $panelBrush.Dispose()
-            $panelBorder.Dispose()
-            $panelPath.Dispose()
-
-            $topCardRect = New-DrawingRectangle -X 28 -Y 34 -Width 108 -Height 96
-            $topCardPath = New-RoundedRectanglePath -Rectangle $topCardRect -Radius 12
-            $topCardGradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
-                $topCardRect,
-                [System.Drawing.Color]::FromArgb(54, 255, 255, 255),
-                [System.Drawing.Color]::FromArgb(24, 128, 86, 255),
-                90
-            )
-            $dialogGraphics.FillPath($topCardGradient, $topCardPath)
-            $topCardGradient.Dispose()
-            $topCardPath.Dispose()
+            $dialogDividerPen = [System.Drawing.Pen]::new([System.Drawing.ColorTranslator]::FromHtml("#d9dde6"), 1)
+            $dialogGraphics.DrawLine($dialogDividerPen, 163, 0, 163, 311)
+            $dialogDividerPen.Dispose()
 
             if ($iconImage) {
-                $dialogIconRect = New-DrawingRectangle -X 34 -Y 44 -Width 92 -Height 92
+                $dialogIconRect = New-DrawingRectangle -X 28 -Y 146 -Width 32 -Height 32
                 Draw-ImageCover -Graphics $dialogGraphics -Image $iconImage -DestinationRectangle $dialogIconRect
             }
             elseif ($logoImage) {
-                $dialogLogoRect = New-DrawingRectangle -X 30 -Y 52 -Width 104 -Height 72
+                $dialogLogoRect = New-DrawingRectangle -X 28 -Y 146 -Width 32 -Height 32
                 Draw-ImageCover -Graphics $dialogGraphics -Image $logoImage -DestinationRectangle $dialogLogoRect
             }
 
-            $dialogFont = [System.Drawing.Font]::new("Segoe UI", 20, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-            $dialogTextBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml("#f6f8ff"))
-            $dialogGraphics.DrawString("NanoDesk", $dialogFont, $dialogTextBrush, 28, 164)
-            $dialogFont.Dispose()
-            $dialogTextBrush.Dispose()
-
-            $dividerPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(44, 120, 88, 255), 2)
-            $dialogGraphics.DrawLine($dividerPen, 24, 200, 140, 200)
-            $dividerPen.Dispose()
-
-            $patternPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(46, 77, 139, 255), 2)
-            $patternDotBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(72, 77, 139, 255))
-            foreach ($lineY in @(226, 244, 262, 280)) {
-                # Нижний тех-паттерн добавляет стиль полосе, но не превращает её в тяжёлый постер.
-                $dialogGraphics.DrawLine($patternPen, 36, $lineY, 128, $lineY)
-                $dialogGraphics.FillEllipse($patternDotBrush, 28, $lineY - 3, 6, 6)
-            }
-            $patternPen.Dispose()
-            $patternDotBrush.Dispose()
+            $dialogBrandTextFont = [System.Drawing.Font]::new("Segoe UI", 11, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+            $dialogBrandTextBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml("#2f3542"))
+            $dialogGraphics.DrawString("NanoDesk", $dialogBrandTextFont, $dialogBrandTextBrush, 64, 154)
+            $dialogBrandTextFont.Dispose()
+            $dialogBrandTextBrush.Dispose()
 
             Save-BitmapAsBmp -Bitmap $dialogBitmap -DestinationPath $dialogPath
         }
@@ -452,8 +359,8 @@ function Apply-BrandingToSourceTree {
         $icon128 = Get-NormalizedPath -BasePath $RootPath -RelativePath "res/128x128.png"
         $icon128x2 = Get-NormalizedPath -BasePath $RootPath -RelativePath "res/128x128@2x.png"
 
-        # Исходный icon.png остаётся главным квадратным брендовым ассетом, поэтому
-        # обновляем из него все платформенные производные файлы проекта.
+        # Квадратный icon.png остаётся первичным источником бренда для иконок,
+        # tray-ресурсов и Windows runner-ресурсов.
         Set-FileFromSource -SourcePath $DownloadedIconPath -DestinationPath $resIconPng
         Backup-IfExists -PathToBackup $resIconIco
         Backup-IfExists -PathToBackup $trayIconIco
@@ -498,8 +405,8 @@ function Apply-BrandingToSourceTree {
 
         $msiResourcesDir = Get-NormalizedPath -BasePath $RootPath -RelativePath "res/msi/Package/Resources"
         if (Test-Path (Split-Path $msiResourcesDir -Parent)) {
-            # MSI-ресурсы строим отдельным рендером, а не просто копированием logo.png,
-            # иначе WiX снова начнёт растягивать бренд в неподходящий формат.
+            # MSI-ресурсы рендерим отдельно, а не просто копируем logo.png,
+            # иначе мастер установки снова начинает растягивать графику в неподходящий формат.
             New-MsiBitmaps -LogoSourcePath $DownloadedLogoPath -IconSourcePath $DownloadedIconPath -ResourcesDirectory $msiResourcesDir
         }
     }

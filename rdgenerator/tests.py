@@ -13,7 +13,7 @@ class RussianDistributionHelperTests(TestCase):
         self.assertEqual(defaults.default_language, "ru")
         self.assertEqual(defaults.homepage_url, "https://nanodesk.ru")
         self.assertEqual(defaults.download_url, "https://nanodesk.ru/download")
-        self.assertEqual(defaults.privacy_url, "https://rdgen.nanodesk.ru/privacy.html")
+        self.assertEqual(defaults.privacy_url, "https://nanodesk.ru/privacy")
         self.assertEqual(defaults.company_name, "NanoDesk")
         self.assertIn("Российской Федерации", defaults.legal_notice)
 
@@ -23,7 +23,7 @@ class RussianDistributionHelperTests(TestCase):
             "RD_DEFAULT_LANGUAGE": "ru",
             "RD_DEFAULT_HOMEPAGE_URL": "https://company.example.ru/help",
             "RD_DEFAULT_DOWNLOAD_URL": "https://company.example.ru/downloads",
-            "RD_DEFAULT_PRIVACY_URL": "https://company.example.ru/privacy.html",
+            "RD_DEFAULT_PRIVACY_URL": "https://company.example.ru/privacy",
             "RD_DEFAULT_COMPANY_NAME": "ООО Ромашка",
         },
         clear=False,
@@ -49,7 +49,7 @@ class RussianDistributionHelperTests(TestCase):
 
         # Если отдельная privacy-ссылка не задана, локальная выдача должна вести
         # на встроенную русскую страницу политики самого rdgen-сайта.
-        self.assertEqual(defaults.privacy_url, "https://rdgen.nanodesk.ru/privacy.html")
+        self.assertEqual(defaults.privacy_url, "https://nanodesk.ru/privacy")
 
     @patch.dict(
         "os.environ",

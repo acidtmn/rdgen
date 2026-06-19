@@ -36,9 +36,10 @@ function Normalize-LicenseText {
     # Всегда приводим старый адрес NanoDesk к каноническому домену.
     $normalizedText = $normalizedText.Replace('https://NanoDesk.', 'https://nanodesk.ru')
     $normalizedText = $normalizedText.Replace('https://NanoDesk', 'https://nanodesk.ru')
-    $normalizedText = $normalizedText.Replace('rdgen.NanoDesk/privacy.html', 'nanodesk.ru')
-    $normalizedText = $normalizedText.Replace('https://rdgen.NanoDesk/privacy.html', 'https://nanodesk.ru')
-    $normalizedText = $normalizedText.Replace('https://nanodesk.ru/privacy.html', 'https://nanodesk.ru')
+    $normalizedText = $normalizedText.Replace('rdgen.NanoDesk/privacy.html', 'nanodesk.ru/privacy')
+    $normalizedText = $normalizedText.Replace('https://rdgen.NanoDesk/privacy.html', 'https://nanodesk.ru/privacy')
+    $normalizedText = $normalizedText.Replace('https://rdgen.nanodesk.ru/privacy.html', 'https://nanodesk.ru/privacy')
+    $normalizedText = $normalizedText.Replace('https://nanodesk.ru/privacy.html', 'https://nanodesk.ru/privacy')
 
     return $normalizedText
 }

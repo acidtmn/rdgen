@@ -2,6 +2,11 @@ from pathlib import Path
 import os
 
 
+OFFICIAL_HOMEPAGE_URL = "https://nanodesk.ru"
+OFFICIAL_PRIVACY_URL = "https://nanodesk.ru/privacy"
+OFFICIAL_TERMS_URL = "https://nanodesk.ru/terms"
+
+
 MSI_PACKAGE_STRINGS_RU = {
     "SummaryCodepage": "1251",
     "ProductLanguage": "1049",
@@ -35,6 +40,7 @@ MSI_PACKAGE_STRINGS_RU = {
     "MyInstallDirDlgStartMenuShortcuts": "Создать ярлыки в меню Пуск",
     "MyInstallDirDlgPrinter": "Установить RustDesk Printer",
 }
+
 
 MSI_WIXEXT_STRINGS_RU = {
     "msierrFirewallCannotConnect": "Не удалось подключиться к Брандмауэру Windows. ([2]   [3]   [4]   [5])",
@@ -81,8 +87,8 @@ def patch_msi_codepage(project_root: Path) -> None:
     package_marker = 'UpgradeCode="$(var.UpgradeCode)" Scope="perMachine">'
     package_with_codepage = 'UpgradeCode="$(var.UpgradeCode)" Scope="perMachine" Codepage="1251">'
 
-    # WiX по умолчанию использует западную кодовую страницу, а для русских строк
-    # в MSI-базе нужна 1251, иначе установщик падает или показывает некорректный текст.
+    # Для русских строк в MSI-базе нужна кодировка 1251, иначе мастер установки
+    # может показать битый текст или сломаться на этапе сборки таблиц.
     if package_with_codepage not in content:
         content = replace_or_fail(content, package_marker, package_with_codepage, package_path)
 
@@ -96,6 +102,9 @@ def patch_msi_project_localizations(project_root: Path) -> None:
 
     content = package_project_path.read_text(encoding="utf-8")
     missing_localizations = []
+
+    # Русские wxl-файлы регистрируем прямо в проекте WiX, чтобы сборка не зависела
+    # от ручного добавления локализаций в отдельных шагах workflow.
     if 'WixLocalization Include="Language\\Package.ru-ru.wxl"' not in content:
         missing_localizations.append('    <WixLocalization Include="Language\\Package.ru-ru.wxl" />')
     if 'WixLocalization Include="Language\\WixExt_ru-ru.wxl"' not in content:
@@ -132,6 +141,7 @@ def to_rtf_unicode(value: str) -> str:
         if char == "\n":
             parts.append(r"\line ")
             continue
+
         code_point = ord(char)
         if 32 <= code_point <= 126 and char not in {"\\", "{", "}"}:
             parts.append(char)
@@ -191,7 +201,7 @@ def build_license_paragraphs(
             "круг допущенных лиц и необходимые организационные и технические меры защиты."
         ),
         (
-            f"Политика конфиденциальности и сведения об обработке данных размещены по адресу: {privacy_url}."
+            f"Политика конфиденциальности: {privacy_url}. Условия использования: {OFFICIAL_TERMS_URL}."
         ),
         (
             "Программа предоставляется по принципу «как есть», если иное прямо не установлено отдельным договором. "
@@ -205,41 +215,45 @@ def build_license_paragraphs(
 def normalize_homepage_url(homepage_url: str) -> str:
     normalized = (homepage_url or "").strip()
 
-    # В старых/битых входных данных в MSI-текст иногда мог приезжать не домен,
-    # а брендовая строка вроде "https://NanoDesk.".
-    # Для лицензии установщика принудительно выравниваем такой случай
-    # в канонический адрес сайта, который ожидает пользователь.
+    # Если в форму или секрет попало старое сокращённое значение вида NanoDesk,
+    # сразу приводим его к официальному публичному домену.
     if normalized.lower() in {
         "https://nanodesk.",
         "https://nanodesk",
         "nanodesk",
         "nanodesk.",
     }:
-        return "https://nanodesk.ru"
+        return OFFICIAL_HOMEPAGE_URL
 
-    return normalized or "https://nanodesk.ru"
+    return normalized or OFFICIAL_HOMEPAGE_URL
 
 
 def normalize_privacy_url(privacy_url: str, homepage_url: str) -> str:
     normalized = (privacy_url or "").strip()
     if not normalized:
-        return f"{homepage_url.rstrip('/')}/privacy.html"
+        return OFFICIAL_PRIVACY_URL
 
     lowered = normalized.lower().rstrip("/")
+
+    # Любые старые адреса rdgen или privacy.html сводим к официальному privacy-разделу,
+    # чтобы в лицензии больше не фигурировал технический домен генератора.
     if lowered in {
         "https://rdgen.nanodesk/privacy.html",
         "https://rdgen.nanodesk./privacy.html",
         "https://rdgen.nanodesk",
         "https://rdgen.nanodesk.",
         "https://rdgen.nanodesk/privacy",
+        "https://rdgen.nanodesk.ru/privacy.html",
+        "https://nanodesk.ru/privacy.html",
+        "https://nanodesk.ru/privacy/",
     }:
-        return "https://rdgen.nanodesk.ru/privacy.html"
+        return OFFICIAL_PRIVACY_URL
 
     if "://rdgen.nanodesk/" in lowered or "://rdgen.nanodesk./" in lowered:
-        return "https://rdgen.nanodesk.ru/privacy.html"
+        return OFFICIAL_PRIVACY_URL
 
     if "://rdgen.nanodesk" in lowered and ".ru" not in lowered:
-        return "https://rdgen.nanodesk.ru/privacy.html"
+        return OFFICIAL_PRIVACY_URL
 
     return normalized
 
@@ -252,9 +266,8 @@ def persist_normalized_distribution_inputs(
     if not github_env:
         return
 
-    # Фиксируем нормализованные значения обратно в env GitHub Actions, чтобы все
-    # последующие шаги workflow использовали уже канонические ссылки, а не сырые
-    # данные из формы или старого секрета сборки.
+    # Нормализованные ссылки сохраняем обратно в окружение GitHub Actions,
+    # чтобы последующие шаги работали уже с каноническими значениями.
     with open(github_env, "a", encoding="utf-8") as env_file:
         env_file.write(f"urlLink={homepage_url}\n")
         env_file.write(f"privacyUrl={privacy_url}\n")
@@ -272,9 +285,10 @@ def patch_license(
     if not license_path.exists():
         return
 
-    # Для MSI-лицензии всегда используем канонический домен NanoDesk,
-    # чтобы в установщик не попадали старые или ошибочные значения из формы.
-    homepage_url = "https://nanodesk.ru"
+    # Для MSI-лицензии всегда используем именно официальный сайт NanoDesk,
+    # даже если пользовательская форма или старый секрет прислали что-то иное.
+    homepage_url = OFFICIAL_HOMEPAGE_URL
+    privacy_url = OFFICIAL_PRIVACY_URL
 
     paragraphs = build_license_paragraphs(
         app_name=app_name,
@@ -283,10 +297,7 @@ def patch_license(
         privacy_url=privacy_url,
         legal_notice=legal_notice.strip(),
     )
-    paragraphs = [paragraph for paragraph in paragraphs if privacy_url not in paragraph]
 
-    # Полностью заменяем английский privacy-policy текст на компактный русский документ,
-    # чтобы на экране лицензии в MSI пользователь видел именно релевантные условия для РФ.
     license_path.write_text(
         build_rtf_document("Лицензионные условия и уведомление", paragraphs),
         encoding="utf-8",
@@ -304,6 +315,8 @@ def patch_msi_language(project_root: Path) -> None:
     package_ru_path = language_dir / "Package.ru-ru.wxl"
     wixext_ru_path = language_dir / "WixExt_ru-ru.wxl"
 
+    # Берём англоязычные шаблоны WiX как базу, а затем точечно подменяем
+    # только те строки, которые должны отображаться пользователю по-русски.
     package_content = package_en_path.read_text(encoding="utf-8")
     package_content = package_content.replace('Culture="en-us" Codepage="1252"', 'Culture="ru-ru" Codepage="1251"')
     package_ru_path.write_text(package_content, encoding="utf-8")
@@ -321,9 +334,9 @@ def main() -> None:
     legal_notice = os.environ.get("legalNotice", "").strip()
     app_name = os.environ.get("appname", "RustDesk")
     company_name = os.environ.get("compname", "RustDesk RU")
-    homepage_url = normalize_homepage_url(os.environ.get("urlLink", "https://nanodesk.ru"))
+    homepage_url = normalize_homepage_url(os.environ.get("urlLink", OFFICIAL_HOMEPAGE_URL))
     privacy_url = normalize_privacy_url(
-        os.environ.get("privacyUrl", f"{homepage_url.rstrip('/')}/privacy.html"),
+        os.environ.get("privacyUrl", OFFICIAL_PRIVACY_URL),
         homepage_url,
     )
 

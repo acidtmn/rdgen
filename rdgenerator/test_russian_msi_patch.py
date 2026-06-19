@@ -34,8 +34,8 @@ class RussianMsiPatchTests(SimpleTestCase):
                 encoding="utf-8",
             )
 
-            # Проверяем новую ответственность патчера: локализации должны
-            # добавляться внутрь Project, не ломая XML-структуру wixproj.
+            # Проверяем, что патчер добавляет локализации внутрь валидного XML-проекта,
+            # а не ломает структуру wixproj побочными строковыми вставками.
             patch_module.patch_msi_project_localizations(project_root)
 
             content = package_project_path.read_text(encoding="utf-8")
@@ -66,8 +66,8 @@ class RussianMsiPatchTests(SimpleTestCase):
                 encoding="utf-8",
             )
 
-            # Проверяем, что генератор локализаций создаёт именно ru-ru файлы
-            # и подставляет русские строки, которые увидит пользователь MSI.
+            # Русские wxl-файлы должны собираться из англоязычных шаблонов предсказуемо,
+            # чтобы пользователь в MSI видел локализованные строки, а не английский fallback.
             patch_module.patch_msi_language(project_root)
 
             package_ru = (language_dir / "Package.ru-ru.wxl").read_text(encoding="utf-8")
@@ -91,14 +91,14 @@ class RussianMsiPatchTests(SimpleTestCase):
                 encoding="utf-8",
             )
 
-            # Проверяем новый сценарий: вместо английской privacy policy
-            # MSI должен получить полноценный русский текст лицензии и уведомлений.
+            # Вместо английского privacy-текста должен появиться полный русский документ
+            # с официальными ссылками на privacy и terms сайта NanoDesk.
             patch_module.patch_license(
                 project_root,
                 app_name="NanoDesk",
                 company_name="ООО НаноДеск",
                 homepage_url="https://nanodesk.ru",
-                privacy_url="https://rdgen.nanodesk.ru/privacy.html",
+                privacy_url="https://nanodesk.ru/privacy",
                 legal_notice="Использование допускается только при наличии законных оснований.",
             )
 
@@ -112,6 +112,8 @@ class RussianMsiPatchTests(SimpleTestCase):
                 license_content,
             )
             self.assertIn("https://nanodesk.ru", license_content)
+            self.assertIn("https://nanodesk.ru/privacy", license_content)
+            self.assertIn("https://nanodesk.ru/terms", license_content)
             self.assertIn(
                 patch_module.to_rtf_unicode("Информационная страница: https://nanodesk.ru."),
                 license_content,
@@ -150,7 +152,7 @@ class RussianMsiPatchTests(SimpleTestCase):
                 "https://rdgen.NanoDesk/privacy.html",
                 "https://nanodesk.ru",
             ),
-            "https://rdgen.nanodesk.ru/privacy.html",
+            "https://nanodesk.ru/privacy",
         )
 
     def test_normalized_urls_are_persisted_for_following_workflow_steps(self):
@@ -163,7 +165,7 @@ class RussianMsiPatchTests(SimpleTestCase):
             try:
                 patch_module.persist_normalized_distribution_inputs(
                     homepage_url="https://nanodesk.ru",
-                    privacy_url="https://rdgen.nanodesk.ru/privacy.html",
+                    privacy_url="https://nanodesk.ru/privacy",
                 )
             finally:
                 if old_github_env is None:
@@ -173,4 +175,4 @@ class RussianMsiPatchTests(SimpleTestCase):
 
             content = github_env_path.read_text(encoding="utf-8")
             self.assertIn("urlLink=https://nanodesk.ru", content)
-            self.assertIn("privacyUrl=https://rdgen.nanodesk.ru/privacy.html", content)
+            self.assertIn("privacyUrl=https://nanodesk.ru/privacy", content)
