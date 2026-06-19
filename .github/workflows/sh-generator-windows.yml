@@ -338,17 +338,22 @@ jobs:
 
       - name: ui.rs icon
         if: ${{ env.iconlink_url != 'false' }}
-        continue-on-error: true
-        shell: bash
+        continue-on-error: false
+        shell: pwsh
         run: |
-          cp ./src/ui.rs ./src/ui.rs.bak
-          ui_brand_source="./res/icon.png"
-          if [ -f ./flutter/assets/logo.png ]; then
-            ui_brand_source="./flutter/assets/logo.png"
-          fi
-          b64=$(base64 -w0 < "$ui_brand_source")
-          perl -0777 -pe "s|iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHL[A-Za-z0-9+/=]+|$b64|g" -i.bak ./src/ui.rs
-          b64=""
+          # Заменяем встроенные PNG в ui.rs отдельным Python-скриптом:
+          # так мы избегаем тяжёлого perl-regex по гигантскому base64, который может зависать на windows runner.
+          $patchUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches/replace_ui_rs_icon.py"
+          Invoke-WebRequest -Uri $patchUrl -OutFile replace_ui_rs_icon.py
+
+          $uiBrandSource = ".\res\icon.png"
+          if (Test-Path .\flutter\assets\logo.png) {
+            $uiBrandSource = ".\flutter\assets\logo.png"
+          }
+
+          python replace_ui_rs_icon.py `
+            --ui-rs .\src\ui.rs `
+            --image $uiBrandSource
 
       - name: fix connection delay
         continue-on-error: true
