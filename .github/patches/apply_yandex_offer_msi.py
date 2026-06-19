@@ -150,19 +150,15 @@ def patch_my_install_dialog(project_root: Path) -> None:
         '            <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="YandexOfferDlg" Condition="LicenseAccepted = &quot;1&quot;" />',
     )
 
-    # Кнопки оффера маршрутизируем отдельно,
-    # чтобы экран можно было безопасно пройти вперёд или назад без вмешательства в остальную логику WiX.
-    content = ensure_line_once(
-        content,
-        '            <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="YandexOfferDlg" Condition="LicenseAccepted = &quot;1&quot;" />',
-        '            <Publish Dialog="YandexOfferDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg" />',
-        file_path,
+    # Навигация Back/Next уже задана внутри самого YandexOfferDlg.
+    # Здесь сознательно не дублируем Publish-строки, иначе WiX получает одинаковые ключи ControlEvent.
+    content = content.replace(
+        '            <Publish Dialog="YandexOfferDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg" />\n',
+        '',
     )
-    content = ensure_line_once(
-        content,
-        '            <Publish Dialog="YandexOfferDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg" />',
-        '            <Publish Dialog="YandexOfferDlg" Control="Next" Event="NewDialog" Value="MyInstallDirDlg" />',
-        file_path,
+    content = content.replace(
+        '            <Publish Dialog="YandexOfferDlg" Control="Next" Event="NewDialog" Value="MyInstallDirDlg" />\n',
+        '',
     )
 
     write_text(file_path, content)
