@@ -147,17 +147,36 @@ function New-MsiBitmaps {
     # Именно эти размеры ожидает мастер установки, поэтому так мы избегаем
     # растяжения, обрезки и наезда брендовой графики на системный текст.
 
-    # Для верхнего баннера держим левую часть спокойной, потому что WiX
-    # печатает там заголовок и описание шага. Сам логотип уводим вправо
-    # и используем именно широкую branding-картинку, которая хорошо подходит
-    # для узкого баннера.
-    magick `
-        -size 493x58 gradient:"#0f2138-#162b46" `
-        -fill "#1e3a5f" -draw "rectangle 336,0 492,57" `
-        "$LogoSourcePath" -resize 132x30^> `
-        -gravity east -geometry +20+0 -composite `
-        -alpha off -type TrueColor `
-        "bmp3:$bannerPath"
+    # Для верхнего баннера больше не вставляем широкий логотип как есть,
+    # потому что на высоте 58px он легко обрезается и выглядит «криво».
+    # Вместо этого собираем компактный header: слева светлая системная зона,
+    # а справа небольшой фирменный блок с иконкой и названием продукта.
+    if ($IconSourcePath -and (Test-Path $IconSourcePath)) {
+        magick `
+            -size 493x58 xc:"#f7f7f7" `
+            -fill "#13345a" -draw "rectangle 316,0 492,57" `
+            -fill "#2d6fe5" -draw "rectangle 316,0 321,57" `
+            -fill "rgba(255,255,255,0.08)" -draw "rectangle 330,9 482,48" `
+            "$IconSourcePath" -resize 28x28^> `
+            -gravity northwest -geometry +332+14 -composite `
+            -font "Segoe UI" -fill "#f6f8ff" -pointsize 18 -gravity northwest -annotate +368+18 "NanoDesk" `
+            -stroke "rgba(77,139,255,0.45)" -strokewidth 1 -draw "line 368,42 472,42" `
+            -alpha off -type TrueColor `
+            "bmp3:$bannerPath"
+    }
+    else {
+        # Если иконка недоступна, используем безопасный fallback:
+        # помещаем широкий логотип только в правую бренд-зону и не даём
+        # ему залезать в системную часть баннера.
+        magick `
+            -size 493x58 xc:"#f7f7f7" `
+            -fill "#13345a" -draw "rectangle 316,0 492,57" `
+            -fill "#2d6fe5" -draw "rectangle 316,0 321,57" `
+            "$LogoSourcePath" -resize 120x24^> `
+            -gravity east -geometry +12+0 -composite `
+            -alpha off -type TrueColor `
+            "bmp3:$bannerPath"
+    }
 
     # Для welcome/finish/license-фона больше не используем широкий логотип как
     # полноценный фон: из-за прозрачного полотна и крупного wordmark он визуально
@@ -180,19 +199,21 @@ function New-MsiBitmaps {
     }
 
     # Полосу собираем в несколько слоёв: глубокая база, тонкая световая кромка,
-    # полупрозрачная внутренняя карточка и лёгкий технологичный паттерн снизу.
-    # Это даёт более дорогой вид, но не вмешивается в правую системную область мастера.
+    # полупрозрачная внутренняя карточка, заметная иконка и подпись NanoDesk.
+    # Это делает welcome-экран полноценным бренд-элементом, а не пустым блоком.
     magick `
         -size 493x312 xc:"#f7f7f7" `
         -fill "#112846" -draw "rectangle 0,0 163,311" `
         -fill "#2a5ea1" -draw "rectangle 164,0 170,311" `
         -fill "rgba(255,255,255,0.10)" -draw "rectangle 16,20 148,290" `
-        -fill "rgba(255,255,255,0.08)" -draw "rectangle 16,20 148,120" `
+        -fill "rgba(255,255,255,0.08)" -draw "rectangle 16,20 148,132" `
         -stroke "rgba(255,255,255,0.12)" -strokewidth 1 -fill none -draw "rectangle 16,20 148,290" `
-        -stroke "rgba(77,139,255,0.18)" -strokewidth 2 -draw "line 36,218 126,218 line 36,236 126,236 line 36,254 126,254 line 36,272 126,272" `
-        -fill "rgba(77,139,255,0.22)" -draw "circle 48,218 51,218 circle 48,236 51,236 circle 48,254 51,254 circle 48,272 51,272" `
+        -stroke "rgba(77,139,255,0.22)" -strokewidth 2 -draw "line 34,226 128,226 line 34,244 128,244 line 34,262 128,262 line 34,280 128,280" `
+        -fill "rgba(77,139,255,0.28)" -draw "circle 46,226 49,226 circle 46,244 49,244 circle 46,262 49,262 circle 46,280 49,280" `
         "$dialogSourcePath" -resize $dialogResize `
         -gravity northwest -geometry $dialogComposite -composite `
+        -font "Segoe UI" -fill "#f6f8ff" -pointsize 20 -gravity northwest -annotate +32+155 "NanoDesk" `
+        -fill "rgba(255,255,255,0.68)" -pointsize 11 -annotate +34+178 "Безопасное администрирование" `
         -alpha off -type TrueColor `
         "bmp3:$dialogPath"
 }
