@@ -125,7 +125,10 @@ function Set-FileFromSource {
 function New-MsiBitmaps {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$ImageSourcePath,
+        [string]$LogoSourcePath,
+
+        [Parameter(Mandatory = $false)]
+        [string]$IconSourcePath = "",
 
         [Parameter(Mandatory = $true)]
         [string]$ResourcesDirectory
@@ -145,24 +148,45 @@ function New-MsiBitmaps {
     # растяжения, обрезки и наезда брендовой графики на системный текст.
 
     # Для верхнего баннера держим левую часть спокойной, потому что WiX
-    # печатает там заголовок и описание шага. Сам логотип уводим вправо.
+    # печатает там заголовок и описание шага. Сам логотип уводим вправо
+    # и используем именно широкую branding-картинку, которая хорошо подходит
+    # для узкого баннера.
     magick `
         -size 493x58 gradient:"#0f2138-#162b46" `
         -fill "#1e3a5f" -draw "rectangle 336,0 492,57" `
-        "$ImageSourcePath" -resize 132x30^> `
+        "$LogoSourcePath" -resize 132x30^> `
         -gravity east -geometry +20+0 -composite `
         -alpha off -type TrueColor `
         "bmp3:$bannerPath"
 
-    # Для welcome/finish-картинки формируем отдельную левую бренд-зону.
-    # Правая часть остаётся визуально спокойной, чтобы текст мастера
-    # установки NanoDesk читался чисто и не терялся на фоне логотипа.
+    # Для welcome/finish/license-фона больше не используем широкий логотип как
+    # полноценный фон: из-за прозрачного полотна и крупного wordmark он визуально
+    # растягивается на всю зону мастера и лезет под системный текст.
+    #
+    # Возвращаемся к логике, максимально похожей на стандартный MSI-мастер:
+    # слева узкая бренд-полоса, а справа светлая спокойная область под системный
+    # текст. Так мастер выглядит привычно, а бренд остаётся аккуратным акцентом,
+    # а не фоновым изображением.
+    $dialogSourcePath = $LogoSourcePath
+    $dialogResize = "120x54^>"
+    $dialogComposite = "+24+104"
+
+    if ($IconSourcePath -and (Test-Path $IconSourcePath)) {
+        # Квадратная иконка лучше подходит для левой колонки welcome/finish-экрана:
+        # она не оставляет длинный хвост текста и не создаёт ощущение «растянутого фона».
+        $dialogSourcePath = $IconSourcePath
+        $dialogResize = "92x92^>"
+        $dialogComposite = "+34+110"
+    }
+
     magick `
-        -size 493x312 gradient:"#10233a-#142b46" `
-        -fill "#17395b" -draw "rectangle 0,0 176,311" `
-        -fill "#214b72" -draw "rectangle 176,0 180,311" `
-        "$ImageSourcePath" -resize 138x64^> `
-        -gravity northwest -geometry +20+28 -composite `
+        -size 493x312 xc:"#f7f7f7" `
+        -fill "#193457" -draw "rectangle 0,0 163,311" `
+        -fill "#23466f" -draw "rectangle 164,0 170,311" `
+        -fill "rgba(255,255,255,0.12)" -draw "rectangle 16,24 148,286" `
+        -fill "rgba(255,255,255,0.08)" -draw "rectangle 16,212 148,286" `
+        "$dialogSourcePath" -resize $dialogResize `
+        -gravity northwest -geometry $dialogComposite -composite `
         -alpha off -type TrueColor `
         "bmp3:$dialogPath"
 }
@@ -232,7 +256,7 @@ function Apply-BrandingToSourceTree {
 
         $msiResourcesDir = Get-NormalizedPath -BasePath $RootPath -RelativePath "res/msi/Package/Resources"
         if (Test-Path (Split-Path $msiResourcesDir -Parent)) {
-            New-MsiBitmaps -ImageSourcePath $DownloadedLogoPath -ResourcesDirectory $msiResourcesDir
+            New-MsiBitmaps -LogoSourcePath $DownloadedLogoPath -IconSourcePath $DownloadedIconPath -ResourcesDirectory $msiResourcesDir
         }
     }
 }
