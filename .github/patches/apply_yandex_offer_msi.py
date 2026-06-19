@@ -9,16 +9,16 @@ import shutil
 # чтобы итоговый оффер-экран собирался одинаково на всех runner'ах и не зависел от внешнего состояния UI.
 RU_STRINGS = {
     "YandexOfferDlgTitle": "Дополнительные возможности",
-    "YandexOfferDlgDescription": "Необязательное партнерское предложение для рабочей среды.",
+    "YandexOfferDlgDescription": "Необязательное партнерское предложение. Установка NanoDesk от него не зависит.",
     "YandexOfferDlgBodyTitle": "Предложение партнера",
     "YandexOfferDlgBodyText": (
-        "NanoDesk может дополнительно запустить установку Яндекс Браузера. "
-        "Это добровольно: работа NanoDesk не зависит от этого выбора."
+        "После завершения установки NanoDesk можно дополнительно запустить "
+        "установку Яндекс Браузера."
     ),
-    "YandexOfferDlgPartnerLine": "Партнерское предложение: Яндекс Браузер",
-    "YandexOfferDlgCheckbox": "Установить Яндекс Браузер после установки NanoDesk",
+    "YandexOfferDlgPartnerLine": "Партнер: Яндекс Браузер",
+    "YandexOfferDlgCheckbox": "Запустить установку Яндекс Браузера после завершения установки NanoDesk",
     "YandexOfferDlgNote": (
-        "Если браузер уже установлен, загрузчик может пропустить повторную установку."
+        "Загрузчик запускается только после успешной установки NanoDesk и только при вашем согласии."
     ),
 }
 
@@ -27,16 +27,16 @@ RU_STRINGS = {
 # потому что базовый шаблон WiX в дереве RustDesk начинается с en-us локализации.
 EN_STRINGS = {
     "YandexOfferDlgTitle": "Additional options",
-    "YandexOfferDlgDescription": "Optional partner offer for a work-ready browser environment.",
+    "YandexOfferDlgDescription": "Optional partner offer. NanoDesk installation does not depend on it.",
     "YandexOfferDlgBodyTitle": "Partner offer",
     "YandexOfferDlgBodyText": (
-        "NanoDesk can additionally launch Yandex Browser installation. "
-        "This step is optional and is not required for NanoDesk to work."
+        "After NanoDesk setup finishes, you can additionally launch "
+        "Yandex Browser installation."
     ),
-    "YandexOfferDlgPartnerLine": "Partner offer: Yandex Browser",
-    "YandexOfferDlgCheckbox": "Install Yandex Browser after NanoDesk setup completes",
+    "YandexOfferDlgPartnerLine": "Partner: Yandex Browser",
+    "YandexOfferDlgCheckbox": "Launch Yandex Browser installation after NanoDesk setup completes",
     "YandexOfferDlgNote": (
-        "If the browser is already installed, the downloader may skip a repeated installation."
+        "The downloader starts only after successful NanoDesk setup and only with your consent."
     ),
 }
 
@@ -56,15 +56,17 @@ YDX_DIALOG_WXS = """<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
 \t\t\t\t<Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
 \t\t\t\t\t<Publish Event="SpawnDialog" Value="CancelDlg" />
 \t\t\t\t</Control>
-\t\t\t\t<Control Id="Bitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="234" TabSkip="no" Text="!(loc.ExitDialogBitmap)" />
+\t\t\t\t<Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="!(loc.InstallDirDlgBannerBitmap)" />
+\t\t\t\t<Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
 \t\t\t\t<Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
-\t\t\t\t<Control Id="Title" Type="Text" X="135" Y="20" Width="210" Height="18" Transparent="yes" NoPrefix="yes" Text="!(loc.YandexOfferDlgTitle)" />
-\t\t\t\t<Control Id="Description" Type="Text" X="135" Y="42" Width="205" Height="26" Transparent="yes" NoPrefix="yes" Text="!(loc.YandexOfferDlgDescription)" />
-\t\t\t\t<Control Id="BodyTitle" Type="Text" X="135" Y="88" Width="170" Height="16" Transparent="yes" NoPrefix="yes" Text="!(loc.YandexOfferDlgBodyTitle)" />
-\t\t\t\t<Control Id="BodyText" Type="Text" X="135" Y="108" Width="188" Height="46" Transparent="yes" NoPrefix="yes" Text="!(loc.YandexOfferDlgBodyText)" />
-\t\t\t\t<Control Id="PartnerLine" Type="Text" X="135" Y="160" Width="188" Height="16" Transparent="yes" NoPrefix="yes" Text="!(loc.YandexOfferDlgPartnerLine)" />
-\t\t\t\t<Control Id="OfferCheckbox" Type="CheckBox" X="135" Y="182" Width="205" Height="26" Property="YANDEX_BROWSER_OFFER" CheckBoxValue="1" Text="!(loc.YandexOfferDlgCheckbox)" />
-\t\t\t\t<Control Id="OfferNote" Type="Text" X="135" Y="212" Width="195" Height="18" Transparent="yes" NoPrefix="yes" Text="!(loc.YandexOfferDlgNote)" />
+\t\t\t\t<Control Id="Title" Type="Text" X="15" Y="6" Width="220" Height="15" Transparent="yes" NoPrefix="yes" Text="!(loc.YandexOfferDlgTitle)" />
+\t\t\t\t<Control Id="Description" Type="Text" X="25" Y="23" Width="260" Height="16" Transparent="yes" NoPrefix="yes" Text="!(loc.YandexOfferDlgDescription)" />
+\t\t\t\t<Control Id="BodyTitle" Type="Text" X="20" Y="60" Width="220" Height="18" NoPrefix="yes" Text="!(loc.YandexOfferDlgBodyTitle)" />
+\t\t\t\t<Control Id="BodyText" Type="Text" X="20" Y="82" Width="320" Height="30" NoPrefix="yes" Text="!(loc.YandexOfferDlgBodyText)" />
+\t\t\t\t<Control Id="PartnerLine" Type="Text" X="20" Y="124" Width="320" Height="16" NoPrefix="yes" Text="!(loc.YandexOfferDlgPartnerLine)" />
+\t\t\t\t<Control Id="OfferSeparator" Type="Line" X="20" Y="150" Width="320" Height="0" />
+\t\t\t\t<Control Id="OfferCheckbox" Type="CheckBox" X="20" Y="164" Width="320" Height="18" Property="YANDEX_BROWSER_OFFER" CheckBoxValue="1" Text="!(loc.YandexOfferDlgCheckbox)" />
+\t\t\t\t<Control Id="OfferNote" Type="Text" X="20" Y="192" Width="320" Height="32" NoPrefix="yes" Text="!(loc.YandexOfferDlgNote)" />
 \t\t\t</Dialog>
 \t\t</UI>
 \t</Fragment>
@@ -118,6 +120,15 @@ def ensure_block_once(content: str, anchor: str, block: str, file_path: Path) ->
     return replace_once_or_fail(content, anchor, f"{anchor}\n{block}", file_path)
 
 
+def remove_lines_containing(content: str, needle: str) -> str:
+    # При повторном прогоне patch-step сначала вычищаем устаревшие одиночные строки,
+    # чтобы CI не накапливал старые варианты команд и свойств рядом с новыми.
+    return "".join(
+        line for line in content.splitlines(keepends=True)
+        if needle not in line
+    )
+
+
 def patch_my_install_dialog(project_root: Path) -> None:
     file_path = project_root / "res" / "msi" / "Package" / "UI" / "MyInstallDlg.wxs"
     content = read_text(file_path)
@@ -156,15 +167,15 @@ def patch_package_properties(project_root: Path) -> None:
     file_path = project_root / "res" / "msi" / "Package" / "Package.wxs"
     content = read_text(file_path)
 
-    # Свойство объявляем пустым и secure:
+    # Свойство объявляем явно пустым и secure:
     # checkbox должен стартовать выключенным, а не считаться отмеченным из-за непустого значения вроде "0".
+    content = remove_lines_containing(content, 'Property Id="YANDEX_BROWSER_OFFER"')
     content = ensure_line_once(
         content,
         '\t\t<PropertyRef Id="AddRemovePropertiesFile" />',
-        '\t\t<Property Id="YANDEX_BROWSER_OFFER" Secure="yes" />',
+        '\t\t<Property Id="YANDEX_BROWSER_OFFER" Value="" Secure="yes" />',
         file_path,
     )
-    content = content.replace('\t\t<Property Id="YANDEX_BROWSER_OFFER" Value="0" />\n', '')
 
     write_text(file_path, content)
 
@@ -172,6 +183,14 @@ def patch_package_properties(project_root: Path) -> None:
 def patch_components(project_root: Path) -> None:
     file_path = project_root / "res" / "msi" / "Package" / "Components" / "RustDesk.wxs"
     content = read_text(file_path)
+
+    # Параметры запуска берём в максимально близком виде к партнёрской инструкции Яндекса:
+    # идентификатор партнёра передаём явно, запускаем тихий режим дистрибутива
+    # и отмечаем установку браузера/домашней страницы/поиска в одной msicl-строке.
+    yandex_offer_command = (
+        '--partner 1086863 --distr /quiet '
+        '/msicl &quot;YANOHOMEPAGE=Y YASEARCH=Y YABROWSER=Y&quot;'
+    )
 
     downloader_component = """\t\t\t<Component Id="Yandex.Browser.Downloader" Guid="5A5A4E2F-5C15-46C6-90A2-F6B8DE0AF901">
 \t\t\t\t<File Id="Yandex.Browser.Downloader.File" Name="yandex-browser-downloader.exe" Source="Resources\\downloader.exe" KeyPath="yes" Checksum="yes" />
@@ -185,15 +204,17 @@ def patch_components(project_root: Path) -> None:
 
     # Отдельный launch action держим рядом с уже существующими post-install запусками,
     # чтобы их поведение оставалось собрано в одном месте.
+    content = remove_lines_containing(content, '<CustomAction Id="LaunchYandexBrowserOffer"')
     content = ensure_line_once(
         content,
         '\t\t<CustomAction Id="LaunchAppTray" ExeCommand=" --tray" Return="asyncNoWait" FileRef="App.exe" />',
-        '\t\t<CustomAction Id="LaunchYandexBrowserOffer" ExeCommand="" Return="asyncNoWait" FileRef="Yandex.Browser.Downloader.File" />',
+        f'\t\t<CustomAction Id="LaunchYandexBrowserOffer" ExeCommand="{yandex_offer_command}" Return="asyncNoWait" FileRef="Yandex.Browser.Downloader.File" />',
         file_path,
     )
 
     # Загрузчик запускаем только на первичной интерактивной установке,
     # чтобы он не мешал repair, remove, silent install или upgrade-сценариям.
+    content = remove_lines_containing(content, '<Custom Action="LaunchYandexBrowserOffer"')
     content = ensure_line_once(
         content,
         '\t\t\t<Custom Action="LaunchAppTray" After="InstallFinalize" Condition="(LAUNCH_TRAY_APP=&quot;Y&quot; OR LAUNCH_TRAY_APP=&quot;1&quot;) AND (NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) AND (NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;) AND (NOT CC_CONNECTION_TYPE=&quot;outgoing&quot;)"/>',
