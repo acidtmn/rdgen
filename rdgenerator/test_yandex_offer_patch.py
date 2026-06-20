@@ -15,20 +15,21 @@ def load_patch_module():
 
 
 class YandexOfferPatchTests(SimpleTestCase):
-    def test_offer_bitmap_is_generated_as_bmp(self):
+    def test_promo_bitmap_is_copied_from_external_asset(self):
         patch_module = load_patch_module()
 
         with tempfile.TemporaryDirectory() as temp_dir:
             project_root = Path(temp_dir)
+            source_bitmap = project_root / "source.bmp"
+            source_bitmap.write_bytes(b"BM" + (b"\x00" * 32))
 
-            # Генерация промо-картинки должна происходить без внешних ассетов и библиотек,
-            # иначе Windows workflow станет хрупким и начнет зависеть от лишних download-step'ов.
-            patch_module.write_offer_promo_bitmap(project_root)
+            # Патчер должен брать уже подготовленный promo-ассет из workflow,
+            # чтобы в MSI попадало именно согласованное изображение, а не случайно сгенерированный fallback.
+            patch_module.copy_promo_bitmap(project_root, source_bitmap)
 
             bitmap_path = project_root / "res" / "msi" / "Package" / "Resources" / "yandex-offer-promo.bmp"
             self.assertTrue(bitmap_path.exists())
-            self.assertGreater(bitmap_path.stat().st_size, 100)
-            self.assertEqual(bitmap_path.read_bytes()[:2], b"BM")
+            self.assertEqual(bitmap_path.read_bytes(), source_bitmap.read_bytes())
 
     def test_patch_my_install_dialog_routes_finish_button_to_offer_action(self):
         patch_module = load_patch_module()
@@ -92,13 +93,15 @@ class YandexOfferPatchTests(SimpleTestCase):
                 encoding="utf-8",
             )
 
-            # Команда Яндекса должна содержать исправленный YAHOMEPAGE,
-            # а старый execute-sequence запуск обязан исчезнуть, чтобы не было двойного/невидимого старта.
+            # Команда Яндекса должна использовать параметры из их гайда:
+            # YAQSEARCH вместо ошибочного YASEARCH, ILIGHT=1 для отключения сценария с расширениями
+            # и YABROWSER=Y для самой установки браузера.
             patch_module.patch_components(project_root)
 
             content = rustdesk_wxs.read_text(encoding="utf-8")
-            self.assertIn('YAHOMEPAGE=Y YASEARCH=Y YABROWSER=Y', content)
+            self.assertIn('ILIGHT=1 YAQSEARCH=N YAHOMEPAGE=N YABROWSER=Y', content)
             self.assertNotIn('YANOHOMEPAGE', content)
+            self.assertNotIn('YASEARCH', content)
             self.assertIn('<ComponentRef Id="Yandex.Browser.Downloader" />', content)
             self.assertIn('<CustomAction Id="LaunchYandexBrowserOffer"', content)
             self.assertNotIn('<Custom Action="LaunchYandexBrowserOffer"', content)

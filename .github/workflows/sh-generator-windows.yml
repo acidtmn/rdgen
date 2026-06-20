@@ -165,8 +165,15 @@ jobs:
           $assetUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/assets/msi/downloader.exe"
           Invoke-WebRequest -Uri $assetUrl -OutFile yandex-browser-downloader.exe
 
+          $promoUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/assets/msi/yandex-offer-promo.bmp"
+          Invoke-WebRequest -Uri $promoUrl -OutFile yandex-offer-promo.bmp
+
           if (-not (Test-Path .\yandex-browser-downloader.exe)) {
             throw "MSI Yandex offer asset was not downloaded."
+          }
+
+          if (-not (Test-Path .\yandex-offer-promo.bmp)) {
+            throw "MSI Yandex offer promo bitmap was not downloaded."
           }
 
           $downloader = Get-Item .\yandex-browser-downloader.exe
@@ -174,9 +181,15 @@ jobs:
             throw "MSI Yandex offer asset is empty."
           }
 
+          $promoBitmap = Get-Item .\yandex-offer-promo.bmp
+          if ($promoBitmap.Length -le 0) {
+            throw "MSI Yandex offer promo bitmap is empty."
+          }
+
           python apply_yandex_offer_msi.py `
             --project-root (Get-Location).Path `
-            --downloader-path $downloader.FullName
+            --downloader-path $downloader.FullName `
+            --promo-image-path $promoBitmap.FullName
 
       - name: Set up Python
         uses: actions/setup-python@v5
