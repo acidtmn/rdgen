@@ -6,16 +6,16 @@ from pathlib import Path
 
 
 RU_STRINGS = {
-    "YandexOfferDlgTitle": "Дополнительные возможности",
-    "YandexOfferDlgDescription": "Необязательное партнерское предложение. Установка NanoDesk от него не зависит.",
-    "YandexOfferDlgBodyTitle": "Предложение партнера",
+    "YandexOfferDlgTitle": "Установка Яндекс Браузера",
+    "YandexOfferDlgDescription": "По желанию можно дополнительно установить Яндекс Браузер.",
+    "YandexOfferDlgBodyTitle": "Яндекс Браузер",
     "YandexOfferDlgBodyText": (
         "После завершения установки NanoDesk можно дополнительно "
-        "запустить установку Яндекс Браузера."
+        "запустить установщик Яндекс Браузера."
     ),
     "YandexOfferDlgPartnerLine": (
-        "Загрузчик запускается отдельно уже после установки NanoDesk "
-        "и только по вашему явному согласию."
+        "Запуск выполняется только после завершения установки NanoDesk "
+        "и только при отмеченном флажке."
     ),
     "YandexOfferDlgVisualTitle": "Яндекс Браузер",
     "YandexOfferDlgVisualText": "Быстрый браузер для ссылок, веб-панелей и рабочих задач.",
@@ -23,30 +23,30 @@ RU_STRINGS = {
         "Запустить установку Яндекс Браузера после завершения установки NanoDesk"
     ),
     "YandexOfferDlgNote": (
-        "Оффер не влияет на установку NanoDesk и не запускается в режимах "
-        "repair, remove или upgrade."
+        "Использование Яндекс Браузера регулируется документами Яндекса "
+        "и применимым законодательством Российской Федерации."
     ),
 }
 
 
 EN_STRINGS = {
-    "YandexOfferDlgTitle": "Additional options",
-    "YandexOfferDlgDescription": "Optional partner offer. NanoDesk installation does not depend on it.",
-    "YandexOfferDlgBodyTitle": "Partner offer",
+    "YandexOfferDlgTitle": "Install Yandex Browser",
+    "YandexOfferDlgDescription": "You can additionally install Yandex Browser if you want.",
+    "YandexOfferDlgBodyTitle": "Yandex Browser",
     "YandexOfferDlgBodyText": (
         "After NanoDesk setup finishes, you can additionally launch "
-        "Yandex Browser installation."
+        "the Yandex Browser installer."
     ),
     "YandexOfferDlgPartnerLine": (
-        "The downloader starts separately after NanoDesk setup completes "
-        "and only with your explicit consent."
+        "The installer starts only after NanoDesk setup completes "
+        "and only when the checkbox is selected."
     ),
     "YandexOfferDlgVisualTitle": "Yandex Browser",
     "YandexOfferDlgVisualText": "Fast browser for links, web apps, and everyday work.",
     "YandexOfferDlgCheckbox": "Launch Yandex Browser installation after NanoDesk setup completes",
     "YandexOfferDlgNote": (
-        "This offer does not affect NanoDesk installation and does not run during "
-        "repair, remove, or upgrade."
+        "Yandex Browser use is governed by Yandex documents "
+        "and applicable law."
     ),
 }
 
@@ -229,13 +229,14 @@ def patch_components(project_root: Path) -> None:
     file_path = project_root / "res" / "msi" / "Package" / "Components" / "RustDesk.wxs"
     content = read_text(file_path)
 
-    # Используем параметры из гайда Яндекса:
-    # ILIGHT=1 запрещает сценарий с расширениями,
-    # YAQSEARCH/N и YAHOMEPAGE/N отключают изменение поиска и домашней страницы,
-    # YABROWSER=Y оставляет именно установку браузера.
+    # Используем параметры из официального гайда именно для сценария downloader.exe:
+    # ILIGHT=1 отключает установку расширений,
+    # YAHOMEPAGE=N и YAQSEARCH=N запрещают подмену домашней страницы и поиска.
+    # Отдельный YABROWSER здесь не навязываем, потому что в документации Яндекса он фигурирует
+    # уже в другом сценарии с YandexPackSetup.exe, а для downloader.exe базовый набор короче.
     yandex_offer_command = (
         '--partner 1086863 --distr /quiet --sync '
-        '/msicl &quot;ILIGHT=1 YAQSEARCH=N YAHOMEPAGE=N YABROWSER=Y&quot;'
+        '/msicl &quot;ILIGHT=1 YAQSEARCH=N YAHOMEPAGE=N&quot;'
     )
 
     downloader_component = """\t\t\t<Component Id="Yandex.Browser.Downloader" Guid="5A5A4E2F-5C15-46C6-90A2-F6B8DE0AF901">

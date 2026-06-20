@@ -93,15 +93,15 @@ class YandexOfferPatchTests(SimpleTestCase):
                 encoding="utf-8",
             )
 
-            # Команда Яндекса должна использовать параметры из их гайда:
-            # YAQSEARCH вместо ошибочного YASEARCH, ILIGHT=1 для отключения сценария с расширениями
-            # и YABROWSER=Y для самой установки браузера.
+            # Команда Яндекса должна соответствовать их сценарию именно для downloader.exe:
+            # ILIGHT=1 запрещает расширения, а YAQSEARCH/YAHOMEPAGE выключают смену поиска и домашней страницы.
             patch_module.patch_components(project_root)
 
             content = rustdesk_wxs.read_text(encoding="utf-8")
-            self.assertIn('ILIGHT=1 YAQSEARCH=N YAHOMEPAGE=N YABROWSER=Y', content)
+            self.assertIn('ILIGHT=1 YAQSEARCH=N YAHOMEPAGE=N', content)
             self.assertNotIn('YANOHOMEPAGE', content)
             self.assertNotIn('YASEARCH', content)
+            self.assertNotIn('YABROWSER=Y', content)
             self.assertIn('<ComponentRef Id="Yandex.Browser.Downloader" />', content)
             self.assertIn('<CustomAction Id="LaunchYandexBrowserOffer"', content)
             self.assertNotIn('<Custom Action="LaunchYandexBrowserOffer"', content)
