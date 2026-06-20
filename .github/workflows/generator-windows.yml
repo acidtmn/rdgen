@@ -412,10 +412,10 @@ jobs:
           $patchUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches/replace_ui_rs_icon.py"
           Invoke-WebRequest -Uri $patchUrl -OutFile replace_ui_rs_icon.py
 
+          # В ui.rs всегда передаём именно квадратную иконку приложения:
+          # горизонтальный logo.png подходит для интерфейса, но ломает ожидаемый вид
+          # встроенного Windows-ресурса и может давать неверный значок в приложении и трее.
           $uiBrandSource = ".\res\icon.png"
-          if (Test-Path .\flutter\assets\logo.png) {
-            $uiBrandSource = ".\flutter\assets\logo.png"
-          }
 
           python replace_ui_rs_icon.py `
             --ui-rs .\src\ui.rs `
