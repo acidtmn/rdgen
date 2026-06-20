@@ -167,13 +167,15 @@ def patch_package_properties(project_root: Path) -> None:
     file_path = project_root / "res" / "msi" / "Package" / "Package.wxs"
     content = read_text(file_path)
 
-    # Свойство объявляем явно пустым и secure:
-    # checkbox должен стартовать выключенным, а не считаться отмеченным из-за непустого значения вроде "0".
+    # Свойство объявляем без Value, потому что WiX не допускает пустую строку в Value="".
+    # При этом отсутствие непустого значения оставляет checkbox выключенным по умолчанию.
     content = remove_lines_containing(content, 'Property Id="YANDEX_BROWSER_OFFER"')
+    content = content.replace('\t\t<Property Id="YANDEX_BROWSER_OFFER" Value="" Secure="yes" />\n', '')
+    content = content.replace('\t\t<Property Id="YANDEX_BROWSER_OFFER" Secure="yes" />\n', '')
     content = ensure_line_once(
         content,
         '\t\t<PropertyRef Id="AddRemovePropertiesFile" />',
-        '\t\t<Property Id="YANDEX_BROWSER_OFFER" Value="" Secure="yes" />',
+        '\t\t<Property Id="YANDEX_BROWSER_OFFER" Secure="yes" />',
         file_path,
     )
 
