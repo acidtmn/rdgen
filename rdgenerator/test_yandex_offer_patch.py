@@ -24,14 +24,14 @@ class YandexOfferPatchTests(SimpleTestCase):
             source_bitmap.write_bytes(b"BM" + (b"\x00" * 32))
 
             # Патчер должен брать уже подготовленный promo-ассет из workflow,
-            # чтобы в MSI попадало именно согласованное изображение, а не случайно сгенерированный fallback.
+            # чтобы в MSI попадало именно согласованное изображение.
             patch_module.copy_promo_bitmap(project_root, source_bitmap)
 
             bitmap_path = project_root / "res" / "msi" / "Package" / "Resources" / "yandex-offer-promo.bmp"
             self.assertTrue(bitmap_path.exists())
             self.assertEqual(bitmap_path.read_bytes(), source_bitmap.read_bytes())
 
-    def test_patch_my_install_dialog_routes_finish_button_to_offer_action(self):
+    def test_patch_my_install_dialog_routes_finish_button_to_prepare_and_launch_actions(self):
         patch_module = load_patch_module()
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -53,20 +53,25 @@ class YandexOfferPatchTests(SimpleTestCase):
                 encoding="utf-8",
             )
 
-            # Finish-кнопка должна запускать downloader из UI-сессии пользователя,
-            # а не из execute-sequence после InstallFinalize, где внешний EXE легко "теряется" без видимого результата.
+            # На Finish сначала должен собраться командный вызов WixQuietExec,
+            # а затем отдельным действием стартовать downloader.
             patch_module.patch_my_install_dialog(project_root)
 
             content = my_install_dialog.read_text(encoding="utf-8")
             self.assertIn('<DialogRef Id="YandexOfferDlg" />', content)
             self.assertIn('Value="YandexOfferDlg"', content)
             self.assertIn(
+                'Event="DoAction" Value="PrepareLaunchYandexBrowserOffer" Order="997" Condition="YANDEX_BROWSER_OFFER=&quot;1&quot;"',
+                content,
+            )
+            self.assertIn(
                 'Event="DoAction" Value="LaunchYandexBrowserOffer" Order="998" Condition="YANDEX_BROWSER_OFFER=&quot;1&quot;"',
                 content,
             )
-            self.assertEqual(content.count('LaunchYandexBrowserOffer'), 1)
+            self.assertEqual(content.count('Value="PrepareLaunchYandexBrowserOffer"'), 1)
+            self.assertEqual(content.count('Value="LaunchYandexBrowserOffer"'), 1)
 
-    def test_patch_components_uses_correct_yandex_command_and_removes_execute_sequence_launch(self):
+    def test_patch_components_uses_wix_quiet_exec_with_browser_install_command(self):
         patch_module = load_patch_module()
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -93,15 +98,18 @@ class YandexOfferPatchTests(SimpleTestCase):
                 encoding="utf-8",
             )
 
-            # Команда Яндекса должна соответствовать их сценарию именно для downloader.exe:
-            # ILIGHT=1 запрещает расширения, а YAQSEARCH/YAHOMEPAGE выключают смену поиска и домашней страницы.
+            # Команда должна явно включать установку браузера,
+            # но не навязывать поиск, домашнюю страницу и расширения.
             patch_module.patch_components(project_root)
 
             content = rustdesk_wxs.read_text(encoding="utf-8")
-            self.assertIn('ILIGHT=1 YAQSEARCH=N YAHOMEPAGE=N', content)
+            self.assertIn('ILIGHT=1 YABROWSER=Y YAQSEARCH=N YAHOMEPAGE=N', content)
             self.assertNotIn('YANOHOMEPAGE', content)
             self.assertNotIn('YASEARCH', content)
-            self.assertNotIn('YABROWSER=Y', content)
+            self.assertIn('Property="WixQuietExecCmdLine"', content)
+            self.assertIn('BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"', content)
+            self.assertIn('DllEntry="WixQuietExec"', content)
+            self.assertIn('<CustomAction Id="PrepareLaunchYandexBrowserOffer"', content)
             self.assertIn('<ComponentRef Id="Yandex.Browser.Downloader" />', content)
             self.assertIn('<CustomAction Id="LaunchYandexBrowserOffer"', content)
             self.assertNotIn('<Custom Action="LaunchYandexBrowserOffer"', content)

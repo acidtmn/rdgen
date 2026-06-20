@@ -23,8 +23,8 @@ RU_STRINGS = {
         "Запустить установку Яндекс Браузера после завершения установки NanoDesk"
     ),
     "YandexOfferDlgNote": (
-        "Использование Яндекс Браузера регулируется документами Яндекса "
-        "и применимым законодательством Российской Федерации."
+        "Условия использования Яндекс Браузера определяются документами Яндекса "
+        "и законодательством РФ."
     ),
 }
 
@@ -74,14 +74,14 @@ YDX_DIALOG_WXS = """<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
 \t\t\t\t<Control Id="Title" Type="Text" X="15" Y="6" Width="220" Height="15" Transparent="yes" NoPrefix="yes" Text="!(loc.YandexOfferDlgTitle)" />
 \t\t\t\t<Control Id="Description" Type="Text" X="25" Y="23" Width="260" Height="16" Transparent="yes" NoPrefix="yes" Text="!(loc.YandexOfferDlgDescription)" />
 \t\t\t\t<Control Id="BodyTitle" Type="Text" X="20" Y="60" Width="176" Height="18" NoPrefix="yes" Text="!(loc.YandexOfferDlgBodyTitle)" />
-\t\t\t\t<Control Id="BodyText" Type="Text" X="20" Y="82" Width="176" Height="34" NoPrefix="yes" Text="!(loc.YandexOfferDlgBodyText)" />
-\t\t\t\t<Control Id="PartnerLine" Type="Text" X="20" Y="122" Width="176" Height="34" NoPrefix="yes" Text="!(loc.YandexOfferDlgPartnerLine)" />
+\t\t\t\t<Control Id="BodyText" Type="Text" X="20" Y="82" Width="176" Height="36" NoPrefix="yes" Text="!(loc.YandexOfferDlgBodyText)" />
+\t\t\t\t<Control Id="PartnerLine" Type="Text" X="20" Y="120" Width="176" Height="38" NoPrefix="yes" Text="!(loc.YandexOfferDlgPartnerLine)" />
 \t\t\t\t<Control Id="PromoBitmap" Type="Bitmap" X="220" Y="60" Width="120" Height="92" TabSkip="no" Text="YandexOfferPromoBitmap" />
 \t\t\t\t<Control Id="VisualTitle" Type="Text" X="220" Y="156" Width="120" Height="14" NoPrefix="yes" Text="!(loc.YandexOfferDlgVisualTitle)" />
-\t\t\t\t<Control Id="VisualText" Type="Text" X="220" Y="172" Width="120" Height="22" NoPrefix="yes" Text="!(loc.YandexOfferDlgVisualText)" />
+\t\t\t\t<Control Id="VisualText" Type="Text" X="220" Y="172" Width="120" Height="26" NoPrefix="yes" Text="!(loc.YandexOfferDlgVisualText)" />
 \t\t\t\t<Control Id="OfferSeparator" Type="Line" X="20" Y="198" Width="320" Height="0" />
-\t\t\t\t<Control Id="OfferCheckbox" Type="CheckBox" X="20" Y="206" Width="320" Height="18" Property="YANDEX_BROWSER_OFFER" CheckBoxValue="1" Text="!(loc.YandexOfferDlgCheckbox)" />
-\t\t\t\t<Control Id="OfferNote" Type="Text" X="20" Y="226" Width="320" Height="10" NoPrefix="yes" Text="!(loc.YandexOfferDlgNote)" />
+\t\t\t\t<Control Id="OfferCheckbox" Type="CheckBox" X="20" Y="204" Width="320" Height="18" Property="YANDEX_BROWSER_OFFER" CheckBoxValue="1" Text="!(loc.YandexOfferDlgCheckbox)" />
+\t\t\t\t<Control Id="OfferNote" Type="Text" X="20" Y="222" Width="320" Height="16" NoPrefix="yes" Text="!(loc.YandexOfferDlgNote)" />
 \t\t\t</Dialog>
 \t\t</UI>
 \t</Fragment>
@@ -90,8 +90,8 @@ YDX_DIALOG_WXS = """<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
 
 
 def make_parser() -> argparse.ArgumentParser:
-    # Аргументы делаем явными,
-    # чтобы workflow падал рано и понятно, если потерялся downloader или promo-ассет.
+    # Явные обязательные аргументы позволяют упасть рано и понятно,
+    # если workflow потерял downloader.exe или готовую promo-картинку.
     parser = argparse.ArgumentParser(
         description="Apply global Yandex Browser MSI offer to RustDesk sources."
     )
@@ -114,44 +114,44 @@ def make_parser() -> argparse.ArgumentParser:
 
 
 def read_text(path: Path) -> str:
-    # Текстовые WiX-файлы читаем строго как UTF-8,
-    # чтобы кириллица не зависела от локали раннера.
+    # WiX-файлы читаем строго как UTF-8,
+    # чтобы локаль раннера не ломала русские строки локализации.
     return path.read_text(encoding="utf-8")
 
 
 def write_text(path: Path, content: str) -> None:
-    # Каталоги создаем заранее,
-    # чтобы повторные прогоны patch-step были идемпотентными.
+    # Каталог создаем заранее,
+    # чтобы повторные прогоны патчера оставались идемпотентными.
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
 
 
 def replace_once_or_fail(content: str, old: str, new: str, file_path: Path) -> str:
-    # Если якорь исчез, лучше упасть сразу,
-    # чем получить "успешную" сборку без реально примененного патча.
+    # Если целевой фрагмент исчез в upstream,
+    # лучше явно упасть, чем получить "успешную" сборку без фактического патча.
     if old not in content:
         raise RuntimeError(f"Expected fragment was not found in {file_path}: {old}")
     return content.replace(old, new, 1)
 
 
 def ensure_line_once(content: str, anchor: str, line_to_insert: str, file_path: Path) -> str:
-    # Повторно одинаковые строки не добавляем,
-    # чтобы rebuild/retry не плодили дубли в Publish и ComponentRef.
+    # Повторно одинаковые строки не вставляем,
+    # чтобы retry сборки не плодил дубликаты Publish и ComponentRef.
     if line_to_insert in content:
         return content
     return replace_once_or_fail(content, anchor, f"{anchor}\n{line_to_insert}", file_path)
 
 
 def ensure_block_once(content: str, anchor: str, block: str, file_path: Path) -> str:
-    # Целый XML-блок вставляем только один раз,
-    # чтобы патчер оставался предсказуемым при повторных запусках.
+    # Крупный XML-блок также вставляем только один раз,
+    # чтобы патчер вел себя предсказуемо на повторных прогонах.
     if block in content:
         return content
     return replace_once_or_fail(content, anchor, f"{anchor}\n{block}", file_path)
 
 
 def remove_lines_containing(content: str, needle: str) -> str:
-    # Перед новой вставкой вычищаем старые однотипные строки,
+    # Старые однотипные строки чистим перед новой вставкой,
     # чтобы рядом не жили устаревшие команды и условия.
     return "".join(
         line for line in content.splitlines(keepends=True)
@@ -163,7 +163,7 @@ def patch_my_install_dialog(project_root: Path) -> None:
     file_path = project_root / "res" / "msi" / "Package" / "UI" / "MyInstallDlg.wxs"
     content = read_text(file_path)
 
-    # Новый диалог подключаем в общий набор UI,
+    # Новый диалог должен войти в общий набор UI,
     # иначе WiX его просто не включит в MSI.
     content = ensure_line_once(
         content,
@@ -172,15 +172,15 @@ def patch_my_install_dialog(project_root: Path) -> None:
         file_path,
     )
 
-    # После принятия лицензии пользователь должен попадать на партнерский экран,
+    # После принятия лицензии переводим пользователя на экран Яндекса,
     # а не сразу на выбор каталога установки.
     content = content.replace(
         '            <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="MyInstallDirDlg" Condition="LicenseAccepted = &quot;1&quot;" />',
         '            <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="YandexOfferDlg" Condition="LicenseAccepted = &quot;1&quot;" />',
     )
 
-    # Старые дубли событий убираем перед новой вставкой,
-    # чтобы повторный прогон патчера не наслаивал одинаковые Publish.
+    # При повторном запуске патчера удаляем старые дубли событий,
+    # чтобы не копить одинаковые Publish-строки.
     content = content.replace(
         '            <Publish Dialog="YandexOfferDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg" />\n',
         '',
@@ -190,12 +190,22 @@ def patch_my_install_dialog(project_root: Path) -> None:
         '',
     )
     content = content.replace(
+        '            <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="PrepareLaunchYandexBrowserOffer" Order="997" Condition="YANDEX_BROWSER_OFFER=&quot;1&quot;" />\n',
+        '',
+    )
+    content = content.replace(
         '            <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchYandexBrowserOffer" Order="998" Condition="YANDEX_BROWSER_OFFER=&quot;1&quot;" />\n',
         '',
     )
 
-    # Downloader запускаем по Finish в UI-сессии пользователя,
-    # а не из execute-sequence после InstallFinalize, где внешний EXE может теряться без видимого результата.
+    # На Finish сначала собираем командную строку,
+    # затем отдельным действием тихо запускаем downloader.
+    content = ensure_line_once(
+        content,
+        '            <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999" />',
+        '            <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="PrepareLaunchYandexBrowserOffer" Order="997" Condition="YANDEX_BROWSER_OFFER=&quot;1&quot;" />',
+        file_path,
+    )
     content = ensure_line_once(
         content,
         '            <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999" />',
@@ -210,8 +220,8 @@ def patch_package_properties(project_root: Path) -> None:
     file_path = project_root / "res" / "msi" / "Package" / "Package.wxs"
     content = read_text(file_path)
 
-    # Свойство объявляем без пустого Value,
-    # потому что WiX 4 считает пустую строку в Value невалидной.
+    # Публичное свойство оставляем без пустого Value,
+    # потому что WiX 4 считает такое описание невалидным.
     content = remove_lines_containing(content, 'Property Id="YANDEX_BROWSER_OFFER"')
     content = content.replace('\t\t<Property Id="YANDEX_BROWSER_OFFER" Value="" Secure="yes" />\n', '')
     content = content.replace('\t\t<Property Id="YANDEX_BROWSER_OFFER" Secure="yes" />\n', '')
@@ -229,14 +239,11 @@ def patch_components(project_root: Path) -> None:
     file_path = project_root / "res" / "msi" / "Package" / "Components" / "RustDesk.wxs"
     content = read_text(file_path)
 
-    # Используем параметры из официального гайда именно для сценария downloader.exe:
-    # ILIGHT=1 отключает установку расширений,
-    # YAHOMEPAGE=N и YAQSEARCH=N запрещают подмену домашней страницы и поиска.
-    # Отдельный YABROWSER здесь не навязываем, потому что в документации Яндекса он фигурирует
-    # уже в другом сценарии с YandexPackSetup.exe, а для downloader.exe базовый набор короче.
+    # Команда соответствует сценарию downloader.exe:
+    # явно просим поставить браузер, но запрещаем смену поиска, домашней страницы и расширения.
     yandex_offer_command = (
-        '--partner 1086863 --distr /quiet --sync '
-        '/msicl &quot;ILIGHT=1 YAQSEARCH=N YAHOMEPAGE=N&quot;'
+        '&quot;[#Yandex.Browser.Downloader.File]&quot; --partner 1086863 '
+        '--distr /quiet /msicl &quot;ILIGHT=1 YABROWSER=Y YAQSEARCH=N YAHOMEPAGE=N&quot;'
     )
 
     downloader_component = """\t\t\t<Component Id="Yandex.Browser.Downloader" Guid="5A5A4E2F-5C15-46C6-90A2-F6B8DE0AF901">
@@ -249,22 +256,29 @@ def patch_components(project_root: Path) -> None:
         file_path,
     )
 
-    # CustomAction держим рядом с остальными post-install действиями,
-    # чтобы логика внешних запусков не была размазана по разным секциям.
+    # Сначала type-51 custom action готовит строку для WixQuietExec,
+    # затем util custom action запускает downloader с готовой командой.
+    content = remove_lines_containing(content, '<CustomAction Id="PrepareLaunchYandexBrowserOffer"')
     content = remove_lines_containing(content, '<CustomAction Id="LaunchYandexBrowserOffer"')
     content = ensure_line_once(
         content,
         '\t\t<CustomAction Id="LaunchAppTray" ExeCommand=" --tray" Return="asyncNoWait" FileRef="App.exe" />',
-        f'\t\t<CustomAction Id="LaunchYandexBrowserOffer" ExeCommand="{yandex_offer_command}" Return="asyncNoWait" FileRef="Yandex.Browser.Downloader.File" />',
+        f'\t\t<CustomAction Id="PrepareLaunchYandexBrowserOffer" Property="WixQuietExecCmdLine" Value="{yandex_offer_command}" />',
+        file_path,
+    )
+    content = ensure_line_once(
+        content,
+        f'\t\t<CustomAction Id="PrepareLaunchYandexBrowserOffer" Property="WixQuietExecCmdLine" Value="{yandex_offer_command}" />',
+        '\t\t<CustomAction Id="LaunchYandexBrowserOffer" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="immediate" Return="ignore" />',
         file_path,
     )
 
-    # Старую execute-sequence привязку убираем полностью,
-    # потому что запуск теперь идет через Finish-кнопку в интерактивной сессии.
+    # Старую execute-sequence привязку убираем полностью:
+    # запуск теперь идет из UI по кнопке Finish, а не после InstallFinalize.
     content = remove_lines_containing(content, '<Custom Action="LaunchYandexBrowserOffer"')
 
-    # Сам downloader обязательно добавляем в набор MSI-файлов,
-    # иначе action останется в XML, но файла не будет в cab-пакете.
+    # Сам downloader обязательно добавляем в набор файлов MSI,
+    # иначе custom action останется в XML, а файла в пакете не будет.
     content = ensure_line_once(
         content,
         '\t\t\t<ComponentRef Id="App.StartupFolder.ShortcutTray" />',
@@ -287,14 +301,14 @@ def patch_language_file(file_path: Path, strings: dict[str, str]) -> None:
         marker = f'\t<String Id="{string_id}" Value="'
 
         # Уже существующие строки обновляем адресно,
-        # чтобы повторный прогон не создавал одинаковые String Id.
+        # чтобы повторный прогон не создавал дубли одинаковых String Id.
         if marker in content:
             start = content.index(marker) + len(marker)
             end = content.index('"', start)
             content = content[:start] + value + content[end:]
             continue
 
-        # Новые строки добавляем перед закрывающим тегом локализации,
+        # Новые строки добавляем перед закрывающим тегом,
         # чтобы wxl оставался компактным и валидным.
         content = replace_once_or_fail(
             content,
@@ -307,8 +321,8 @@ def patch_language_file(file_path: Path, strings: dict[str, str]) -> None:
 
 
 def write_offer_dialog(project_root: Path) -> None:
-    # Разметку оффер-диалога пишем целиком из патчера,
-    # чтобы она не зависела от случайных ручных правок в upstream-файлах.
+    # Разметку offer-диалога генерируем целиком из патчера,
+    # чтобы она не зависела от случайных ручных правок в исходниках.
     write_text(
         project_root / "res" / "msi" / "Package" / "UI" / "YandexOfferDlg.wxs",
         YDX_DIALOG_WXS,
@@ -322,7 +336,7 @@ def copy_file_or_fail(source_path: Path, destination_path: Path, label: str) -> 
         raise FileNotFoundError(f"{label} was not found: {source_path}")
 
     if source_path.stat().st_size <= 0:
-        # Пустой файл ничем не лучше отсутствующего,
+        # Пустой файл так же бесполезен, как и отсутствующий,
         # поэтому падаем сразу и явно.
         raise RuntimeError(f"{label} is empty: {source_path}")
 
