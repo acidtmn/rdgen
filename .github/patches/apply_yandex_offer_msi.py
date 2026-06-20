@@ -22,10 +22,6 @@ RU_STRINGS = {
     "YandexOfferDlgCheckbox": (
         "Запустить установку Яндекс Браузера после завершения установки NanoDesk"
     ),
-    "YandexOfferDlgNote": (
-        "Условия использования Яндекс Браузера определяются документами Яндекса "
-        "и законодательством РФ."
-    ),
 }
 
 
@@ -44,10 +40,6 @@ EN_STRINGS = {
     "YandexOfferDlgVisualTitle": "Yandex Browser",
     "YandexOfferDlgVisualText": "Fast browser for links, web apps, and everyday work.",
     "YandexOfferDlgCheckbox": "Launch Yandex Browser installation after NanoDesk setup completes",
-    "YandexOfferDlgNote": (
-        "Yandex Browser use is governed by Yandex documents "
-        "and applicable law."
-    ),
 }
 
 
@@ -80,8 +72,7 @@ YDX_DIALOG_WXS = """<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
 \t\t\t\t<Control Id="VisualTitle" Type="Text" X="220" Y="156" Width="120" Height="14" NoPrefix="yes" Text="!(loc.YandexOfferDlgVisualTitle)" />
 \t\t\t\t<Control Id="VisualText" Type="Text" X="220" Y="172" Width="120" Height="26" NoPrefix="yes" Text="!(loc.YandexOfferDlgVisualText)" />
 \t\t\t\t<Control Id="OfferSeparator" Type="Line" X="20" Y="198" Width="320" Height="0" />
-\t\t\t\t<Control Id="OfferCheckbox" Type="CheckBox" X="20" Y="204" Width="320" Height="18" Property="YANDEX_BROWSER_OFFER" CheckBoxValue="1" Text="!(loc.YandexOfferDlgCheckbox)" />
-\t\t\t\t<Control Id="OfferNote" Type="Text" X="20" Y="222" Width="320" Height="16" NoPrefix="yes" Text="!(loc.YandexOfferDlgNote)" />
+\t\t\t\t<Control Id="OfferCheckbox" Type="CheckBox" X="20" Y="208" Width="320" Height="18" Property="YANDEX_BROWSER_OFFER" CheckBoxValue="1" Text="!(loc.YandexOfferDlgCheckbox)" />
 \t\t\t</Dialog>
 \t\t</UI>
 \t</Fragment>
