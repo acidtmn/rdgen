@@ -377,6 +377,24 @@ jobs:
           flutter pub run flutter_launcher_icons
           cd ..
 
+      - name: restore Windows icon resources after flutter icon generation
+        if: ${{ env.iconlink_url != 'false' }}
+        shell: pwsh
+        run: |
+          # flutter_launcher_icons может заново сгенерировать app_icon.ico и вернуть дефолтный бренд.
+          # Сразу после него повторно восстанавливаем Windows-иконки из uploaded icon.png,
+          # чтобы EXE, MSI, ярлыки и трей брали именно ресурс с rdgen.nanodesk.ru.
+          $brandingScriptUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/scripts/apply_windows_branding.ps1"
+          Invoke-WebRequest -Uri $brandingScriptUrl -OutFile .\apply_windows_branding.ps1
+          .\apply_windows_branding.ps1 `
+            -RepositoryRoot (Get-Location).Path `
+            -IconBaseUrl '${{ env.iconlink_url }}' `
+            -IconUuid '${{ env.iconlink_uuid }}' `
+            -IconFileName '${{ env.iconlink_file }}' `
+            -LogoBaseUrl '${{ env.logolink_url }}' `
+            -LogoUuid '${{ env.logolink_uuid }}' `
+            -LogoFileName '${{ env.logolink_file }}'
+
       - name: Build rustdesk
         run: |
           # Windows: build RustDesk
