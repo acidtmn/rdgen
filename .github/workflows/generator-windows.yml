@@ -151,6 +151,14 @@ jobs:
           Invoke-WebRequest -Uri $patchUrl -OutFile apply_russian_distribution.py
           python apply_russian_distribution.py
 
+      - name: Apply NanoDesk client authorization
+        shell: pwsh
+        run: |
+          $patchBase = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches"
+          Invoke-WebRequest -Uri "$patchBase/apply_nanodesk_client_auth.py" -OutFile apply_nanodesk_client_auth.py
+          Invoke-WebRequest -Uri "$patchBase/nanodesk_client_auth.tis" -OutFile nanodesk_client_auth.tis
+          python apply_nanodesk_client_auth.py --template nanodesk_client_auth.tis
+
       - name: Install ImageMagick on Windows
         run: |
           choco install -y imagemagick.app --no-progress

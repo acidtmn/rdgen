@@ -1,0 +1,145 @@
+const nanodesk_account_api = "https://nanodesk.ru/api/v1/client-auth";
+const nanodesk_address_book_api = "https://nanodesk.ru/api/v1/address-book";
+var nanodesk_auth_polling = false;
+
+function hasNanodeskSession() {
+    return !!handler.get_local_option("nanodesk_access_token");
+}
+
+function getNanodeskAccountLabel() {
+    try {
+        var user = JSON.parse(handler.get_local_option("nanodesk_user_info"));
+        return (user.displayName || user.email || "NanoDesk").trim();
+    } catch (_) {}
+    return "";
+}
+
+function setNanodeskSession(data) {
+    // Токены NanoDesk не заменяют legacy access_token, участвующий в сетевом протоколе клиента.
+    handler.set_local_option("nanodesk_access_token", data.accessToken || "");
+    handler.set_local_option("nanodesk_refresh_token", data.refreshToken || "");
+    handler.set_local_option("nanodesk_user_info", JSON.stringify(data.user || {}));
+    if (myIdMenu) myIdMenu.update();
+    if (abComponent) getAb();
+}
+
+function clearNanodeskSession() {
+    handler.set_local_option("nanodesk_access_token", "");
+    handler.set_local_option("nanodesk_refresh_token", "");
+    handler.set_local_option("nanodesk_user_info", "");
+    nanodesk_auth_polling = false;
+    if (myIdMenu) myIdMenu.update();
+    if (abComponent) abComponent.update();
+}
+
+function getNanodeskAuthHeaders() {
+    return "Authorization: Bearer " + handler.get_local_option("nanodesk_access_token");
+}
+
+function nanodeskLogin() {
+    if (nanodesk_auth_polling) return;
+    var deviceInfo = getDeviceInfo();
+    nanodesk_auth_polling = true;
+
+    httpRequest(nanodesk_account_api + "/device", #post, {
+        fingerprint: handler.get_uuid(),
+        rustdeskId: my_id,
+        name: deviceInfo.name || "NanoDesk",
+        platform: deviceInfo.os || OS
+    }, function(data) {
+        if (!data.deviceCode || !data.verificationUriComplete) {
+            nanodesk_auth_polling = false;
+            msgbox("custom-error", "NanoDesk", "Сервер вернул неполный ответ авторизации");
+            return;
+        }
+
+        handler.open_url(data.verificationUriComplete);
+        msgbox("custom-nanodesk-login", "Вход в NanoDesk", <div .form>
+            <div style="text-align:center; font-size:1.05em; line-height:1.5;">Подтвердите вход в открывшемся браузере.</div>
+            <div style="text-align:center; font-size:1.6em; font-weight:bold; letter-spacing:0.12em; margin:0.7em 0;">{data.userCode}</div>
+            <div style="text-align:center; color:#777;">Окно закроется автоматически после подтверждения.</div>
+            <progress style="color:#155eef; margin-top:1em;" />
+        </div>, "", function() {
+            nanodesk_auth_polling = false;
+        }, 250, get_msgbox_width());
+        pollNanodeskAuthorization(data.deviceCode, data.interval || 3);
+    }, function(err, status) {
+        nanodesk_auth_polling = false;
+        msgbox("custom-error", "NanoDesk", err || "Не удалось начать вход");
+    });
+}
+
+function pollNanodeskAuthorization(deviceCode, interval) {
+    if (!nanodesk_auth_polling) return;
+    httpRequest(nanodesk_account_api + "/token", #post, { deviceCode: deviceCode }, function(data) {
+        if (data.status == "pending") {
+            self.timer((interval || 3) * 1000, function() { pollNanodeskAuthorization(deviceCode, interval); });
+            return;
+        }
+        if (data.status == "approved" && data.accessToken) {
+            setNanodeskSession(data);
+            nanodesk_auth_polling = false;
+            closeMsgbox();
+            msgbox("custom-nanodesk-success", "Вход выполнен", "Устройство связано с вашим аккаунтом NanoDesk.");
+            return;
+        }
+
+        nanodesk_auth_polling = false;
+        closeMsgbox();
+        msgbox("custom-error", "NanoDesk", data.status == "denied" ? "Запрос отклонён в браузере" : "Код подтверждения истёк. Начните вход ещё раз.");
+    }, function(err, status) {
+        nanodesk_auth_polling = false;
+        closeMsgbox();
+        msgbox("custom-error", "NanoDesk", err || "Не удалось проверить подтверждение");
+    });
+}
+
+function refreshNanodeskTokens(onSuccess=null) {
+    var refreshToken = handler.get_local_option("nanodesk_refresh_token");
+    if (!refreshToken) {
+        clearNanodeskSession();
+        return;
+    }
+    httpRequest(nanodesk_account_api + "/refresh", #post, { refreshToken: refreshToken }, function(data) {
+        if (!data.accessToken) {
+            clearNanodeskSession();
+            return;
+        }
+        setNanodeskSession(data);
+        if (onSuccess) onSuccess();
+    }, function(err, status) {
+        clearNanodeskSession();
+    });
+}
+
+function refreshNanodeskCurrentUser(retry=true) {
+    var token = handler.get_local_option("nanodesk_access_token");
+    if (!token) {
+        if (handler.get_local_option("nanodesk_refresh_token")) refreshNanodeskTokens(function() { refreshNanodeskCurrentUser(false); });
+        return;
+    }
+    httpRequest(nanodesk_account_api + "/me", #post, {}, function(data) {
+        if (data.user) {
+            handler.set_local_option("nanodesk_user_info", JSON.stringify(data.user));
+            if (myIdMenu) myIdMenu.update();
+            if (abComponent) getAb();
+        }
+    }, function(err, status) {
+        if (retry) refreshNanodeskTokens(function() { refreshNanodeskCurrentUser(false); });
+        else clearNanodeskSession();
+    }, getNanodeskAuthHeaders());
+}
+
+function nanodeskLogout() {
+    var token = handler.get_local_option("nanodesk_access_token");
+    if (!token) {
+        clearNanodeskSession();
+        return;
+    }
+    httpRequest(nanodesk_account_api + "/logout", #post, {}, function(data) {
+        clearNanodeskSession();
+    }, function(err, status) {
+        // Локальный выход обязателен даже при недоступном сервере; удалённую сессию можно отозвать в кабинете.
+        clearNanodeskSession();
+    }, getNanodeskAuthHeaders());
+}
