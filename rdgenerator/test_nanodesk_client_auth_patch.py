@@ -91,14 +91,50 @@ getHttpHeaders();
 """,
                 encoding="utf-8",
             )
+            flutter_dir = project_root / "flutter" / "lib" / "common" / "widgets"
+            flutter_dir.mkdir(parents=True)
+            (flutter_dir / "login.dart").write_text(
+                """
+final opLabel = {
+          'github': 'GitHub',
+          'gitlab': 'GitLab'
+        }[op.toLowerCase()] ??
+        toCapitalized(op);
+
+Future<bool?> loginDialog() async {
+    thirdAuthWidget() => Obx(() {
+          return Offstage(
+            offstage: loginOptions.isEmpty,
+            child: Column(children: [LoginWidgetOP()]),
+          );
+        });
+
+    final title = Row();
+    return CustomAlertDialog(
+      title: title,
+      content: Column(
+        children: [
+          LoginWidgetUserPass(),
+          thirdAuthWidget(),
+        ],
+      ),
+      onCancel: onDialogCancel,
+      onSubmit: onLogin,
+    );
+}
+""",
+                encoding="utf-8",
+            )
 
             self.patch.patch_index_html(project_root, TEMPLATE_PATH)
             self.patch.patch_index_tis(project_root)
             self.patch.patch_address_book(project_root)
+            self.patch.patch_flutter_login(project_root)
 
             index_html = (ui_dir / "index.html").read_text(encoding="utf-8")
             index_tis = (ui_dir / "index.tis").read_text(encoding="utf-8")
             address_book = (ui_dir / "ab.tis").read_text(encoding="utf-8")
+            flutter_login = (flutter_dir / "login.dart").read_text(encoding="utf-8")
 
             self.assertIn('include "client_auth.tis";', index_html)
             self.assertIn("nanodeskLogin();", index_tis)
@@ -108,6 +144,11 @@ getHttpHeaders();
             self.assertIn('nanodesk_address_book_api + "/get"', address_book)
             self.assertIn('nanodesk_address_book_api + "/save"', address_book)
             self.assertIn("getNanodeskAuthHeaders()", address_book)
+            self.assertIn("'nanodesk': 'NanoDesk ID'", flutter_login)
+            self.assertIn("'Вход в NanoDesk'", flutter_login)
+            self.assertIn("VK ID.", flutter_login)
+            self.assertNotIn("LoginWidgetUserPass()", flutter_login)
+            self.assertNotIn("translate('or')", flutter_login)
             self.assertEqual(
                 (ui_dir / "client_auth.tis").read_text(encoding="utf-8"),
                 TEMPLATE_PATH.read_text(encoding="utf-8"),

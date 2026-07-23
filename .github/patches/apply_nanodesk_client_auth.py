@@ -107,6 +107,113 @@ def patch_address_book(project_root: Path) -> None:
     address_book.write_text(content, encoding="utf-8")
 
 
+def patch_flutter_login(project_root: Path) -> None:
+    """Заменяет password/Google/WebAuthn-форму Flutter на единый браузерный вход NanoDesk."""
+    login_file = project_root / "flutter" / "lib" / "common" / "widgets" / "login.dart"
+    content = login_file.read_text(encoding="utf-8")
+
+    label_pattern = re.compile(
+        r"final opLabel = \{\s*'github': 'GitHub',\s*'gitlab': 'GitLab'\s*\}"
+        r"\[op\.toLowerCase\(\)\] \?\?\s*toCapitalized\(op\);"
+    )
+    content, replacements = label_pattern.subn(
+        """final opLabel = {
+          'github': 'GitHub',
+          'gitlab': 'GitLab',
+          'nanodesk': 'NanoDesk ID'
+        }[op.toLowerCase()] ??
+        toCapitalized(op);""",
+        content,
+        count=1,
+    )
+    if replacements != 1:
+        raise RuntimeError(f"Не найден label провайдера в {login_file}")
+
+    auth_widget_pattern = re.compile(
+        r"    thirdAuthWidget\(\) => Obx\(\(\) \{.*?\n        \}\);\n\n"
+        r"    final title = Row\(",
+        re.DOTALL,
+    )
+    auth_widget = """    thirdAuthWidget() => Obx(() {
+          return Offstage(
+            offstage: loginOptions.isEmpty,
+            child: LoginWidgetOP(
+              ops: loginOptions
+                  .map((e) => ConfigOP(op: e['name'], icon: e['icon']))
+                  .toList(),
+              curOP: curOP,
+              cbLogin: (Map<String, dynamic> authBody) async {
+                LoginResponse? resp;
+                try {
+                  // Rust-слой уже сохранил отзывной токен после браузерного подтверждения.
+                  resp = gFFI.userModel.getLoginResponseFromAuthBody(authBody);
+                } catch (e) {
+                  debugPrint('Failed to parse NanoDesk login body: "$authBody"');
+                }
+                close(true);
+                if (resp != null) {
+                  handleLoginResponse(resp, false, null);
+                }
+              },
+            ),
+          );
+        });
+
+    final title = Row("""
+    content, replacements = auth_widget_pattern.subn(auth_widget, content, count=1)
+    if replacements != 1:
+        raise RuntimeError(f"Не найден блок OIDC-кнопок в {login_file}")
+
+    dialog_start = content.find("    return CustomAlertDialog(")
+    content_start = content.find("      content: Column(", dialog_start)
+    cancel_start = content.find("      onCancel: onDialogCancel,", content_start)
+    if dialog_start < 0 or content_start < 0 or cancel_start < 0:
+        raise RuntimeError(f"Не найдено содержимое login dialog в {login_file}")
+
+    premium_content = """      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: const Color(0xff4f46e5),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            alignment: Alignment.center,
+            child: const Text(
+              'N',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 30,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Вход в NanoDesk',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          const SizedBox(
+            width: 300,
+            child: Text(
+              'Продолжите в защищённом окне браузера. Доступны код из письма, Яндекс ID и VK ID.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(height: 20),
+          thirdAuthWidget(),
+        ],
+      ),
+"""
+    content = content[:content_start] + premium_content + content[cancel_start:]
+    content = replace_required(content, "      onSubmit: onLogin,", "      onSubmit: () {},", login_file)
+
+    login_file.write_text(content, encoding="utf-8")
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Внедряет NanoDesk Device Authorization в Windows-клиент")
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
@@ -125,6 +232,7 @@ def main() -> None:
     patch_index_html(project_root, template_path)
     patch_index_tis(project_root)
     patch_address_book(project_root)
+    patch_flutter_login(project_root)
     print("NanoDesk client authorization patch applied")
 
 
