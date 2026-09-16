@@ -738,7 +738,7 @@ jobs:
               "${{ env.uuid }}" \
               "${{ env.filename }}" \
               "./SignOutput" \
-              "${{ env.token }}"
+              "${{ secrets.GENERATOR_UPLOAD_TOKEN }}"
 
   cleanup:
     needs: [build-for-windows-flutter]
