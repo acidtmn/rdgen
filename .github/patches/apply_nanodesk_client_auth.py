@@ -464,8 +464,8 @@ class TehpultDesktopActionStrip extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
+    });
+    }
 }
 
 class _TehpultActionCard extends StatelessWidget {
