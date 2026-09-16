@@ -550,7 +550,8 @@ def main() -> None:
     patch_address_book(project_root)
     patch_flutter_login(project_root)
     patch_flutter_dashboard(project_root)
-    print("ТехПульт client authorization patch applied")
+    # Windows runner использует cp1252 для stdout, поэтому служебный результат оставляем ASCII.
+    print("Tehpult client authorization patch applied")
 
 
 if __name__ == "__main__":
