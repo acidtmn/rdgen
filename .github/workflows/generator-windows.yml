@@ -21,6 +21,9 @@ on:
 
 
 env:
+  # Windows runner defaults to a legacy console encoding, while the client name may be Cyrillic.
+  PYTHONIOENCODING: utf-8
+  PYTHONUTF8: "1"
   SCITER_RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503, also 1.78 has ABI change which causes our sciter version not working, https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
   RUST_VERSION: "1.75" # sciter failed on m1 with 1.78 because of https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
   CARGO_NDK_VERSION: "3.1.2"
@@ -606,11 +609,12 @@ jobs:
         shell: bash
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
-          mv "./rustdesk/rustdesk.exe" "./rustdesk/${{ env.appname }}.exe" || echo "rustdesk.exe"
+          # Keep the staged executable ASCII-only; the display name remains independent.
+          mv "./rustdesk/rustdesk.exe" "./rustdesk/${{ env.filename }}.exe" || echo "rustdesk.exe"
           sed -i '/dpiAware/d' res/manifest.xml
           pushd ./libs/portable
           pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../rustdesk/ -o . -e "../../rustdesk/${{ env.appname }}.exe"
+          python3 ./generate.py -f ../../rustdesk/ -o . -e "../../rustdesk/${{ env.filename }}.exe"
           popd
           mkdir -p ./SignOutput
           mv ./target/release/rustdesk-portable-packer.exe "./SignOutput/rustdesk.exe"
@@ -623,7 +627,7 @@ jobs:
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           $myappname = "${{ env.appname }}" -replace '\s','_'
-          cp "rustdesk/${{ env.appname }}.exe" "rustdesk/${myappname}.exe" -ErrorAction SilentlyContinue
+          cp "rustdesk/${{ env.filename }}.exe" "rustdesk/${myappname}.exe" -ErrorAction SilentlyContinue
           pushd ./res/msi
           python preprocess.py --app-name "$myappname" --arp -d ../../rustdesk
           nuget restore msi.sln
