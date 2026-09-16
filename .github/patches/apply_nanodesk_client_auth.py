@@ -528,6 +528,106 @@ class _TehpultActionCard extends StatelessWidget {
     dashboard_file.write_text(content, encoding="utf-8")
 
 
+def patch_branding_details(project_root: Path) -> None:
+    """Убирает данные upstream-компании из окна «О программе», оставляя только сайт продукта."""
+    settings_file = project_root / "flutter" / "lib" / "desktop" / "pages" / "desktop_setting_page.dart"
+    content = settings_file.read_text(encoding="utf-8")
+    content = replace_required(
+        content,
+        "'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd.\\n$license'",
+        "'tehpult.ru'",
+        settings_file,
+    )
+    content = replace_required(content, "translate('Slogan_tip')", "''", settings_file)
+    settings_file.write_text(content, encoding="utf-8")
+
+    # Метаданные EXE не должны возвращать прежнего правообладателя в свойствах файла Windows.
+    for cargo_file in (project_root / "Cargo.toml", project_root / "libs" / "portable" / "Cargo.toml"):
+        cargo_content = cargo_file.read_text(encoding="utf-8")
+        cargo_content = cargo_content.replace(
+            'LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."',
+            'LegalCopyright = "tehpult.ru"',
+        )
+        cargo_file.write_text(cargo_content, encoding="utf-8")
+
+
+def patch_update_channel(project_root: Path) -> None:
+    """Включает штатную карточку обновления для кастомного клиента и направляет проверку в API ТехПульт."""
+    common_file = project_root / "src" / "common.rs"
+    content = common_file.read_text(encoding="utf-8")
+    content = replace_required(
+        content,
+        """pub fn check_software_update() {
+    if is_custom_client() {
+        return;
+    }
+""",
+        """pub fn check_software_update() {
+""",
+        common_file,
+    )
+    content = replace_required(
+        content,
+        """    let (request, url) =
+        hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
+""",
+        """    let (request, _) =
+        hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
+    let url = "https://s1.tehpult.ru/api/v1/client/version".to_string();
+""",
+        common_file,
+    )
+    common_file.write_text(content, encoding="utf-8")
+
+    desktop_file = project_root / "flutter" / "lib" / "desktop" / "pages" / "desktop_home_page.dart"
+    content = desktop_file.read_text(encoding="utf-8")
+    content = replace_required(
+        content,
+        """    if (!bind.isCustomClient() &&
+        updateUrl.isNotEmpty &&
+        !isCardClosed &&
+        bind.mainUriPrefixSync().contains('rustdesk')) {
+      final isToUpdate = (isWindows || isMacOS) && bind.mainIsInstalled();
+      String btnText = isToUpdate ? 'Update' : 'Download';
+      GestureTapCallback onPressed = () async {
+        final Uri url = Uri.parse('https://rustdesk.com/download');
+        await launchUrl(url);
+      };
+      if (isToUpdate) {
+        onPressed = () {
+          handleUpdate(updateUrl);
+        };
+      }
+""",
+        """    if (updateUrl.isNotEmpty && !isCardClosed) {
+      String btnText = 'Скачать';
+      GestureTapCallback onPressed = () async {
+        final Uri url = Uri.parse('https://rustdesk.com/download');
+        await launchUrl(url);
+      };
+""",
+        desktop_file,
+    )
+    content = replace_required(
+        content,
+        """          help: isToUpdate ? 'Changelog' : null,
+          link: isToUpdate
+              ? 'https://github.com/rustdesk/rustdesk/releases/tag/${bind.mainGetNewVersion()}'
+              : null);
+""",
+        """          help: null,
+          link: null);
+""",
+        desktop_file,
+    )
+    desktop_file.write_text(content, encoding="utf-8")
+
+    mobile_file = project_root / "flutter" / "lib" / "mobile" / "pages" / "connection_page.dart"
+    content = mobile_file.read_text(encoding="utf-8")
+    content = replace_required(content, "if (!bind.isCustomClient() && !isIOS)", "if (!isIOS)", mobile_file)
+    mobile_file.write_text(content, encoding="utf-8")
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Внедряет авторизацию ТехПульт в клиент")
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
@@ -550,6 +650,8 @@ def main() -> None:
     patch_address_book(project_root)
     patch_flutter_login(project_root)
     patch_flutter_dashboard(project_root)
+    patch_branding_details(project_root)
+    patch_update_channel(project_root)
     # Windows runner использует cp1252 для stdout, поэтому служебный результат оставляем ASCII.
     print("Tehpult client authorization patch applied")
 
