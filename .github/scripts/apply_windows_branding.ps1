@@ -72,10 +72,12 @@ function Download-PngAsset {
         [Parameter(Mandatory = $true)]
         [string]$BaseUrl,
 
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyString()]
         [string]$Uuid,
 
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyString()]
         [string]$FileName,
 
         [Parameter(Mandatory = $true)]
@@ -95,6 +97,61 @@ function Download-PngAsset {
         $assetUrl = "$BaseUrl/get_png?$query"
     }
     Invoke-WebRequest -Uri $assetUrl -OutFile $DestinationPath
+}
+
+function Test-DirectPngUrl {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Url
+    )
+
+    return $Url -match '\.png(?:\?.*)?$'
+}
+
+function Assert-FilesMatch {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ExpectedPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ActualPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$AssetName
+    )
+
+    if (-not (Test-Path $ActualPath)) {
+        throw "Branding validation failed: $AssetName was not created at $ActualPath"
+    }
+
+    $expectedHash = (Get-FileHash -LiteralPath $ExpectedPath -Algorithm SHA256).Hash
+    $actualHash = (Get-FileHash -LiteralPath $ActualPath -Algorithm SHA256).Hash
+    if ($expectedHash -ne $actualHash) {
+        throw "Branding validation failed: $AssetName does not match the downloaded source"
+    }
+
+    Write-Host "Branding verified: $AssetName ($actualHash)"
+}
+
+function Assert-GeneratedIcon {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$IconPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$AssetName
+    )
+
+    if (-not (Test-Path $IconPath)) {
+        throw "Branding validation failed: $AssetName was not created at $IconPath"
+    }
+
+    $icon = Get-Item -LiteralPath $IconPath
+    if ($icon.Length -lt 1024) {
+        throw "Branding validation failed: $AssetName is unexpectedly small ($($icon.Length) bytes)"
+    }
+
+    Write-Host "Branding verified: $AssetName ($($icon.Length) bytes)"
 }
 
 function New-EmbeddedSvgFromPng {
@@ -460,22 +517,55 @@ $brandingWorkDir = Get-NormalizedPath -BasePath $resolvedRepositoryRoot -Relativ
 New-Item -ItemType Directory -Path $brandingWorkDir -Force | Out-Null
 
 $downloadedIconPath = $null
-if ($IconBaseUrl -and $IconBaseUrl -ne "false" -and $IconUuid -and $IconFileName) {
+$hasDirectIconUrl = $IconBaseUrl -and $IconBaseUrl -ne "false" -and (Test-DirectPngUrl -Url $IconBaseUrl)
+$hasLegacyIconAsset = $IconBaseUrl -and $IconBaseUrl -ne "false" -and $IconUuid -and $IconFileName
+if ($hasDirectIconUrl -or $hasLegacyIconAsset) {
     $downloadedIconPath = Join-Path $brandingWorkDir "icon.png"
     Download-PngAsset -BaseUrl $IconBaseUrl -Uuid $IconUuid -FileName $IconFileName -DestinationPath $downloadedIconPath
 }
 
 $downloadedLogoPath = $null
-if ($LogoBaseUrl -and $LogoBaseUrl -ne "false" -and $LogoUuid -and $LogoFileName) {
+$hasDirectLogoUrl = $LogoBaseUrl -and $LogoBaseUrl -ne "false" -and (Test-DirectPngUrl -Url $LogoBaseUrl)
+$hasLegacyLogoAsset = $LogoBaseUrl -and $LogoBaseUrl -ne "false" -and $LogoUuid -and $LogoFileName
+if ($hasDirectLogoUrl -or $hasLegacyLogoAsset) {
     $downloadedLogoPath = Join-Path $brandingWorkDir "logo.png"
     Download-PngAsset -BaseUrl $LogoBaseUrl -Uuid $LogoUuid -FileName $LogoFileName -DestinationPath $downloadedLogoPath
 }
 
+if ($IconBaseUrl -and $IconBaseUrl -ne "false" -and -not $downloadedIconPath) {
+    throw "Icon branding is configured, but neither a direct PNG URL nor legacy UUID metadata is valid"
+}
+
+if ($LogoBaseUrl -and $LogoBaseUrl -ne "false" -and -not $downloadedLogoPath) {
+    throw "Logo branding is configured, but neither a direct PNG URL nor legacy UUID metadata is valid"
+}
+
 Apply-BrandingToSourceTree -RootPath $resolvedRepositoryRoot -DownloadedIconPath $downloadedIconPath -DownloadedLogoPath $downloadedLogoPath
+
+if ($downloadedIconPath) {
+    Assert-FilesMatch -ExpectedPath $downloadedIconPath -ActualPath (Get-NormalizedPath -BasePath $resolvedRepositoryRoot -RelativePath "res/icon.png") -AssetName "application PNG"
+    Assert-FilesMatch -ExpectedPath $downloadedIconPath -ActualPath (Get-NormalizedPath -BasePath $resolvedRepositoryRoot -RelativePath "flutter/assets/icon.png") -AssetName "Flutter application PNG"
+    Assert-GeneratedIcon -IconPath (Get-NormalizedPath -BasePath $resolvedRepositoryRoot -RelativePath "res/icon.ico") -AssetName "Windows executable ICO"
+    Assert-GeneratedIcon -IconPath (Get-NormalizedPath -BasePath $resolvedRepositoryRoot -RelativePath "res/tray-icon.ico") -AssetName "Windows tray ICO"
+    Assert-GeneratedIcon -IconPath (Get-NormalizedPath -BasePath $resolvedRepositoryRoot -RelativePath "flutter/windows/runner/resources/app_icon.ico") -AssetName "Flutter runner ICO"
+}
+
+if ($downloadedLogoPath) {
+    Assert-FilesMatch -ExpectedPath $downloadedLogoPath -ActualPath (Get-NormalizedPath -BasePath $resolvedRepositoryRoot -RelativePath "flutter/assets/logo.png") -AssetName "Flutter logo PNG"
+}
 
 if ($DistDir) {
     $resolvedDistDir = [System.IO.Path]::GetFullPath((Join-Path $resolvedRepositoryRoot $DistDir))
     if (Test-Path $resolvedDistDir) {
         Apply-BrandingToDistTree -BuiltDistDir $resolvedDistDir -DownloadedIconPath $downloadedIconPath -DownloadedLogoPath $downloadedLogoPath
+
+        if ($downloadedIconPath) {
+            Assert-FilesMatch -ExpectedPath $downloadedIconPath -ActualPath (Get-NormalizedPath -BasePath $resolvedDistDir -RelativePath "data/flutter_assets/assets/icon.png") -AssetName "built application PNG"
+            Assert-GeneratedIcon -IconPath (Get-NormalizedPath -BasePath $resolvedDistDir -RelativePath "data/flutter_assets/assets/icon.ico") -AssetName "built application ICO"
+        }
+
+        if ($downloadedLogoPath) {
+            Assert-FilesMatch -ExpectedPath $downloadedLogoPath -ActualPath (Get-NormalizedPath -BasePath $resolvedDistDir -RelativePath "data/flutter_assets/assets/logo.png") -AssetName "built logo PNG"
+        }
     }
 }

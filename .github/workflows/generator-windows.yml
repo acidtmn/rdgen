@@ -553,6 +553,17 @@ jobs:
             -LogoFileName '${{ env.logolink_file }}' `
             -BrandName '${{ env.appname }}'
 
+      - name: verify branding in built Windows client
+        if: ${{ env.iconlink_url != 'false' }}
+        shell: pwsh
+        run: |
+          $verifyScriptUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/scripts/verify_windows_branding.ps1"
+          Invoke-WebRequest -Uri $verifyScriptUrl -OutFile .\verify_windows_branding.ps1
+          .\verify_windows_branding.ps1 `
+            -RepositoryRoot (Get-Location).Path `
+            -ExecutablePath 'rustdesk/rustdesk.exe' `
+            -DistDir 'rustdesk'
+
       - name: find Runner.res
         # Windows: find Runner.res (compiled from ./flutter/windows/runner/Runner.rc), copy to ./Runner.res
         # Runner.rc does not contain actual version, but Runner.res does
@@ -623,6 +634,16 @@ jobs:
           mkdir -p ./SignOutput
           mv ./target/release/rustdesk-portable-packer.exe "./SignOutput/rustdesk.exe"
 
+      - name: verify branding in portable executable
+        if: ${{ env.iconlink_url != 'false' && env.UPLOAD_ARTIFACT == 'true' }}
+        shell: pwsh
+        run: |
+          $verifyScriptUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/scripts/verify_windows_branding.ps1"
+          Invoke-WebRequest -Uri $verifyScriptUrl -OutFile .\verify_windows_branding.ps1
+          .\verify_windows_branding.ps1 `
+            -RepositoryRoot (Get-Location).Path `
+            -ExecutablePath 'SignOutput/rustdesk.exe'
+
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v2
 
@@ -688,6 +709,16 @@ jobs:
           Expand-Archive -Path ./SignOutput/signed_files.zip -DestinationPath ./SignOutput/ -Force
           Remove-Item ./SignOutput/unsigned_files.zip
           Remove-Item ./SignOutput/signed_files.zip
+
+      - name: verify branding in final Windows executable
+        if: ${{ env.iconlink_url != 'false' }}
+        shell: pwsh
+        run: |
+          $verifyScriptUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/scripts/verify_windows_branding.ps1"
+          Invoke-WebRequest -Uri $verifyScriptUrl -OutFile .\verify_windows_branding.ps1
+          .\verify_windows_branding.ps1 `
+            -RepositoryRoot (Get-Location).Path `
+            -ExecutablePath 'SignOutput/rustdesk.exe'
 
       - name: verify signed MSI payload
         if: env.UPLOAD_ARTIFACT == 'true'
