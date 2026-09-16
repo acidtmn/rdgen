@@ -551,6 +551,20 @@ def patch_branding_details(project_root: Path) -> None:
         cargo_file.write_text(cargo_content, encoding="utf-8")
 
 
+def patch_connection_security_notice(project_root: Path) -> None:
+    """Объясняет предупреждение E2EE по-русски, не отключая защитную проверку клиента."""
+    language_file = project_root / "src" / "lang" / "ru.rs"
+    content = language_file.read_text(encoding="utf-8")
+    content = replace_required(content, '("Continue", ""),', '("Continue", "Продолжить"),', language_file)
+    content = replace_required(
+        content,
+        '("conn-e2ee-unavailable-tip", "Не удалось проверить сквозное шифрование.\\nУдаленное устройство, возможно, еще настраивается. Повторите попытку позже.\\nЕсли это повторяется, сервер может быть ненадежным.\\nВсе равно продолжить?"),',
+        '("conn-e2ee-unavailable-tip", "Не удалось подтвердить сквозное шифрование.\\nТакое возможно, если на удалённом компьютере установлена версия ТехПульт 1.4.6. Для защищённого соединения обновите ТехПульт на удалённом устройстве.\\nПродолжить без подтверждённого сквозного шифрования?"),',
+        language_file,
+    )
+    language_file.write_text(content, encoding="utf-8")
+
+
 def patch_update_channel(project_root: Path) -> None:
     """Включает штатную карточку обновления для кастомного клиента и направляет проверку в API ТехПульт."""
     common_file = project_root / "src" / "common.rs"
@@ -651,6 +665,7 @@ def main() -> None:
     patch_flutter_login(project_root)
     patch_flutter_dashboard(project_root)
     patch_branding_details(project_root)
+    patch_connection_security_notice(project_root)
     patch_update_channel(project_root)
     # Windows runner использует cp1252 для stdout, поэтому служебный результат оставляем ASCII.
     print("Tehpult client authorization patch applied")

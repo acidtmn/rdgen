@@ -2,43 +2,43 @@ from pathlib import Path
 import os
 
 
-OFFICIAL_HOMEPAGE_URL = "https://nanodesk.ru"
-OFFICIAL_PRIVACY_URL = "https://nanodesk.ru/privacy"
-OFFICIAL_TERMS_URL = "https://nanodesk.ru/terms"
+OFFICIAL_HOMEPAGE_URL = "https://tehpult.ru"
+OFFICIAL_PRIVACY_URL = "https://tehpult.ru/privacy"
+OFFICIAL_TERMS_URL = "https://tehpult.ru/terms"
 
 
 MSI_PACKAGE_STRINGS_RU = {
     "SummaryCodepage": "1251",
     "ProductLanguage": "1049",
     "DowngradeError": "На компьютере уже установлена более новая версия [ProductName].",
-    "AR_Comment": "RustDesk, адаптированный для русскоязычной выдачи",
-    "F_App": "RustDesk",
-    "F_App_Desc": "Установка основных компонентов RustDesk.",
-    "SC_Uninstall": "Удалить RustDesk",
-    "SC_Uninstall_Desc": "Удаляет RustDesk или его компоненты с компьютера",
+    "AR_Comment": "ТехПульт — приложение для безопасного удалённого доступа",
+    "F_App": "ТехПульт",
+    "F_App_Desc": "Установка основных компонентов ТехПульт.",
+    "SC_Uninstall": "Удалить ТехПульт",
+    "SC_Uninstall_Desc": "Удаляет ТехПульт или его компоненты с компьютера",
     "F_Client": "Клиент",
     "F_Client_Desc": "Пользовательский интерфейс удалённого доступа.",
     "F_Client_Plugins": "Плагины",
     "F_Client_Plugins_Desc": "Дополнительные модули клиента.",
     "F_LAVFilters": "LAV Filters",
     "F_LAVFilters_Desc": "Рекомендуемые фильтры DirectShow для аудио и видео.",
-    "SC_Client": "RustDesk",
-    "SC_Client_Desc": "Запуск RustDesk.",
-    "SC_Client_Tray": "RustDesk Tray",
-    "SC_Client_Tray_Desc": "Запуск RustDesk в системном трее.",
+    "SC_Client": "ТехПульт",
+    "SC_Client_Desc": "Запуск ТехПульт.",
+    "SC_Client_Tray": "ТехПульт в трее",
+    "SC_Client_Tray_Desc": "Запуск ТехПульт в системном трее.",
     "F_Server": "Служба",
-    "F_Server_Desc": "Служебная часть RustDesk.",
+    "F_Server_Desc": "Служебная часть ТехПульт.",
     "F_Server_Plugins": "Плагины",
     "F_Server_Plugins_Desc": "Дополнительные модули службы.",
-    "Service_DisplayName": "Служба RustDesk",
-    "Service_Description": "Эта служба запускает серверную часть RustDesk.",
+    "Service_DisplayName": "Служба ТехПульт",
+    "Service_Description": "Эта служба запускает серверную часть ТехПульт.",
     "LC_OS": "[ProductName] требует Windows 7 / 2008 R2 или новее.",
     "LC_ADMIN": "Для установки [ProductName] нужны права администратора.",
     "AnotherAppDialogTitle": "Отмена установки.",
     "AnotherAppDialogDescription": "Приложение установлено другим способом. Сначала удалите существующую установку.",
     "MyInstallDirDlgDesktopShortcuts": "Создать значок на рабочем столе",
     "MyInstallDirDlgStartMenuShortcuts": "Создать ярлыки в меню Пуск",
-    "MyInstallDirDlgPrinter": "Установить RustDesk Printer",
+    "MyInstallDirDlgPrinter": "Установить принтер ТехПульт",
 }
 
 
@@ -285,7 +285,7 @@ def patch_license(
     if not license_path.exists():
         return
 
-    # Для MSI-лицензии всегда используем именно официальный сайт NanoDesk,
+    # Для MSI-лицензии всегда используем именно официальный сайт ТехПульт,
     # даже если пользовательская форма или старый секрет прислали что-то иное.
     homepage_url = OFFICIAL_HOMEPAGE_URL
     privacy_url = OFFICIAL_PRIVACY_URL

@@ -144,8 +144,8 @@ Future<bool?> loginDialog() async {
             self.assertIn('nanodesk_address_book_api + "/get"', address_book)
             self.assertIn('nanodesk_address_book_api + "/save"', address_book)
             self.assertIn("getNanodeskAuthHeaders()", address_book)
-            self.assertIn("'nanodesk': 'NanoDesk ID'", flutter_login)
-            self.assertIn("'Вход в NanoDesk'", flutter_login)
+            self.assertIn("'tehpult': 'ТехПульт ID'", flutter_login)
+            self.assertIn("'Вход в ТехПульт'", flutter_login)
             self.assertIn("VK ID.", flutter_login)
             self.assertNotIn("LoginWidgetUserPass()", flutter_login)
             self.assertNotIn("translate('or')", flutter_login)
@@ -153,6 +153,31 @@ Future<bool?> loginDialog() async {
                 (ui_dir / "client_auth.tis").read_text(encoding="utf-8"),
                 TEMPLATE_PATH.read_text(encoding="utf-8"),
             )
+
+    def test_localizes_legacy_client_encryption_warning_without_disabling_it(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir)
+            language_dir = project_root / "src" / "lang"
+            language_dir.mkdir(parents=True)
+            language_file = language_dir / "ru.rs"
+
+            # Фикстура повторяет только две upstream-строки, которые меняет
+            # профиль ТехПульт, чтобы изменение текста не могло отключить
+            # саму проверку защищённого соединения в сетевом слое.
+            language_file.write_text(
+                '("Continue", ""),\n'
+                '("conn-e2ee-unavailable-tip", "Не удалось проверить сквозное шифрование.\\n'
+                'Удаленное устройство, возможно, еще настраивается. Повторите попытку позже.\\n'
+                'Если это повторяется, сервер может быть ненадежным.\\nВсе равно продолжить?"),\n',
+                encoding="utf-8",
+            )
+
+            self.patch.patch_connection_security_notice(project_root)
+
+            patched = language_file.read_text(encoding="utf-8")
+            self.assertIn('("Continue", "Продолжить"),', patched)
+            self.assertIn("версия ТехПульт 1.4.6", patched)
+            self.assertIn("без подтверждённого сквозного шифрования", patched)
 
 
 if __name__ == "__main__":
