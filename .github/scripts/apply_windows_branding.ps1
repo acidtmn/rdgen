@@ -84,10 +84,16 @@ function Download-PngAsset {
 
     Ensure-ParentDirectory -TargetPath $DestinationPath
 
-    # URL собираем через параметры, чтобы корректно переживать пробелы и спецсимволы
-    # в имени загружаемого файла, который пришёл из интерфейса генератора.
-    $query = "filename=$([System.Uri]::EscapeDataString($FileName))&uuid=$([System.Uri]::EscapeDataString($Uuid))"
-    $assetUrl = "$BaseUrl/get_png?$query"
+    # Закрытый RDGen больше не выступает файловым хостингом: для повторяемых сборок
+    # допускаем прямой URL проверенного фирменного PNG из репозитория.
+    if ($BaseUrl -match '\.png(?:\?.*)?$') {
+        $assetUrl = $BaseUrl
+    }
+    else {
+        # Старый формат оставляем для уже существующих запусков генератора с UUID-ресурсами.
+        $query = "filename=$([System.Uri]::EscapeDataString($FileName))&uuid=$([System.Uri]::EscapeDataString($Uuid))"
+        $assetUrl = "$BaseUrl/get_png?$query"
+    }
     Invoke-WebRequest -Uri $assetUrl -OutFile $DestinationPath
 }
 

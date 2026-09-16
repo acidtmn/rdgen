@@ -10,7 +10,12 @@ on:
         type: string
       zip_url:
         description: 'url to zip of json'
-        required: true
+        required: false
+        default: ''
+        type: string
+      config_b64:
+        description: 'base64-encoded private generator configuration'
+        required: false
         default: ''
         type: string
 
@@ -46,6 +51,8 @@ jobs:
     uses: ./.github/workflows/fetch-encrypted-secrets.yml
     with:
       zip_url_json: ${{ inputs.zip_url }}
+      config_b64: ${{ inputs.config_b64 }}
+    secrets: inherit
 
   generate-bridge:
     uses: ./.github/workflows/bridge.yml

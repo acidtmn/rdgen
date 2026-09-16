@@ -373,6 +373,161 @@ def patch_flutter_login(project_root: Path) -> None:
     login_file.write_text(content, encoding="utf-8")
 
 
+def patch_flutter_dashboard(project_root: Path) -> None:
+    """Добавляет видимые на Flutter-версии клиента карточки входа и поддержки."""
+    dashboard_file = (
+        project_root / "flutter" / "lib" / "desktop" / "pages" / "desktop_home_page.dart"
+    )
+    content = dashboard_file.read_text(encoding="utf-8")
+
+    login_import = "import '../../common/widgets/login.dart';\n"
+    if login_import not in content:
+        content = replace_required(
+            content,
+            "import '../widgets/button.dart';\n",
+            "import '../widgets/button.dart';\n" + login_import,
+            dashboard_file,
+        )
+
+    content = replace_required(
+        content,
+        '''  buildRightPane(BuildContext context) {
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: ConnectionPage(),
+    );
+  }
+''',
+        '''  buildRightPane(BuildContext context) {
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: Column(
+        children: [
+          const TehpultDesktopActionStrip(),
+          const Divider(height: 1),
+          const Expanded(child: ConnectionPage()),
+        ],
+      ),
+    );
+  }
+''',
+        dashboard_file,
+    )
+
+    card = '''
+class TehpultDesktopActionStrip extends StatelessWidget {
+  const TehpultDesktopActionStrip({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Obx(() {
+      final isLoggedIn = gFFI.userModel.isLogin;
+      final accountName = gFFI.userModel.displayNameOrUserName;
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(22, 18, 22, 16),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: _TehpultActionCard(
+                icon: Icons.verified_user_outlined,
+                title: isLoggedIn ? 'Аккаунт подключён' : 'Авторизация',
+                description: isLoggedIn
+                    ? 'Вы вошли как $accountName. Адресная книга доступна на ваших устройствах.'
+                    : 'Войдите, чтобы синхронизировать адресную книгу и управлять устройствами.',
+                actionLabel: isLoggedIn ? 'Открыть кабинет' : 'Войти в ТехПульт',
+                onAction: () async {
+                  if (isLoggedIn) {
+                    await launchUrl(Uri.parse('https://tehpult.ru/account'));
+                    return;
+                  }
+                  await loginDialog();
+                },
+                color: const Color(0xff126bff),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              flex: 2,
+              child: _TehpultActionCard(
+                icon: Icons.support_agent_outlined,
+                title: 'Нужна помощь?',
+                description: 'Подскажем по установке, подключению и безопасной настройке.',
+                actionLabel: 'Открыть поддержку',
+                onAction: () async {
+                  await launchUrl(Uri.parse('https://tehpult.ru/support'));
+                },
+                color: theme.colorScheme.secondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TehpultActionCard extends StatelessWidget {
+  const _TehpultActionCard({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.actionLabel,
+    required this.onAction,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final String actionLabel;
+  final Future<void> Function() onAction;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 116),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withOpacity(0.22)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text(description, maxLines: 2, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 10),
+                TextButton(onPressed: onAction, child: Text(actionLabel)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+'''
+    content = replace_required(
+        content,
+        "const borderColor = Color(0xFF2F65BA);\n\n",
+        "const borderColor = Color(0xFF2F65BA);\n\n" + card,
+        dashboard_file,
+    )
+    dashboard_file.write_text(content, encoding="utf-8")
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Внедряет авторизацию ТехПульт в клиент")
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
@@ -394,6 +549,7 @@ def main() -> None:
     patch_dashboard_styles(project_root)
     patch_address_book(project_root)
     patch_flutter_login(project_root)
+    patch_flutter_dashboard(project_root)
     print("ТехПульт client authorization patch applied")
 
 
