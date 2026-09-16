@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-# Скрипт принимает готовые артефакты Windows-сборки и отправляет их на rdgen/api.
+# Скрипт принимает готовые артефакты Windows-сборки и отправляет их в API ТехПульт.
 # Выносим это в отдельный модуль, чтобы одинаковая логика повторных попыток
 # и сетевых таймаутов не дублировалась по нескольким workflow-файлам.
 target_url="${1:?target url is required}"
@@ -40,9 +40,9 @@ upload_file() {
     --http1.1 \
     --connect-timeout 30 \
     --max-time 1800 \
-    --retry 5 \
-    --retry-delay 10 \
-    --retry-all-errors \
+    --retry 3 \
+    --retry-delay 5 \
+    --retry-connrefused \
     -X POST \
     "${auth_header[@]}" \
     -F "file=@${file_path}" \

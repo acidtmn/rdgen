@@ -105,16 +105,6 @@ jobs:
         with:
           zip_password: ${{ secrets.ZIP_PASSWORD }}
 
-      - name: Finalize and Cleanup zip/json
-        if: always() # Run even if previous steps fail
-        continue-on-error: true
-        uses: fjogeleit/http-request-action@v1
-        with:
-          url: "${{ secrets.GENURL }}/cleanzip"
-          method: 'POST'
-          customHeaders: '{"Content-Type": "application/json"}'
-          data: '{"uuid": "${{ env.uuid }}"}'
-
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@v6
         with:
@@ -131,6 +121,20 @@ jobs:
         if: ${{ env.rdgen == 'false' }}
         run: |
           echo "STATUS_URL=${{ env.apiServer }}/api/updategh" >> $env:GITHUB_ENV
+
+      - name: Validate Tehpult artifact upload API
+        shell: bash
+        env:
+          GENERATOR_UPLOAD_TOKEN: ${{ secrets.GENERATOR_UPLOAD_TOKEN }}
+        run: |
+          test -n "${GENERATOR_UPLOAD_TOKEN}"
+          printf 'tehpult-upload-preflight' > preflight.txt
+          status_code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            -H "Authorization: Bearer ${GENERATOR_UPLOAD_TOKEN}" \
+            -F "file=@preflight.txt;filename=preflight.txt" \
+            "https://s1.tehpult.ru/api/save_custom_client")
+          rm -f preflight.txt
+          test "${status_code}" = "400"
 
       - name: Checkout source code
         if: ${{ env.VERSION != 'master' }}
@@ -430,7 +434,7 @@ jobs:
           shell: pwsh
           continue_on_error: true
           command: |
-            Invoke-WebRequest -Uri https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/cycle_monitor.diff -OutFile cycle_monitor.diff
+            Invoke-WebRequest -Uri https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches/cycle_monitor.diff -OutFile cycle_monitor.diff
             git apply cycle_monitor.diff
 
       - name: use X for offline display instead of orange circle
@@ -442,7 +446,7 @@ jobs:
           shell: pwsh
           continue_on_error: true
           command: |
-            Invoke-WebRequest -Uri https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/xoffline.diff -OutFile xoffline.diff
+            Invoke-WebRequest -Uri https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches/xoffline.diff -OutFile xoffline.diff
             git apply xoffline.diff
 
       - name: removeNewVersionNotif
@@ -704,41 +708,18 @@ jobs:
         run: |
           mv ./SignOutput/rustdesk.msi "./SignOutput/${{ env.filename }}.msi" || echo "rustdesk"
 
-      - name: send file to rdgen server
-        if: ${{ env.rdgen == 'true' }}
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 35
-          max_attempts: 2
-          shell: bash
-          command: |
-            curl --fail --show-error --location \
-              "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/scripts/upload_generated_windows_artifacts.sh" \
-              -o upload_generated_windows_artifacts.sh
-            bash upload_generated_windows_artifacts.sh \
-              "${{ secrets.GENURL }}/save_custom_client" \
-              "${{ env.uuid }}" \
-              "${{ env.filename }}" \
-              "./SignOutput" \
-              "${{ env.token }}"
-
-      - name: send file to api server
-        if: ${{ env.rdgen == 'false' }}
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 35
-          max_attempts: 2
-          shell: bash
-          command: |
-            curl --fail --show-error --location \
-              "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/scripts/upload_generated_windows_artifacts.sh" \
-              -o upload_generated_windows_artifacts.sh
-            bash upload_generated_windows_artifacts.sh \
-              "${{ env.apiServer }}/api/save_custom_client" \
-              "${{ env.uuid }}" \
-              "${{ env.filename }}" \
-              "./SignOutput" \
-              "${{ secrets.GENERATOR_UPLOAD_TOKEN }}"
+      - name: Send Windows artifacts to Tehpult API
+        shell: bash
+        run: |
+          curl --fail --show-error --location \
+            "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/scripts/upload_generated_windows_artifacts.sh" \
+            -o upload_generated_windows_artifacts.sh
+          bash upload_generated_windows_artifacts.sh \
+            "https://s1.tehpult.ru/api/save_custom_client" \
+            "${{ env.uuid }}" \
+            "${{ env.filename }}" \
+            "./SignOutput" \
+            "${{ secrets.GENERATOR_UPLOAD_TOKEN }}"
 
   cleanup:
     needs: [build-for-windows-flutter]
