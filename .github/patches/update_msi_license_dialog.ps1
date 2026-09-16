@@ -33,13 +33,14 @@ function Normalize-LicenseText {
     # чтобы результат не зависел от побочных эффектов preprocess/WiX.
     $normalizedText = $LicenseText
 
-    # Всегда приводим старый адрес NanoDesk к каноническому домену.
-    $normalizedText = $normalizedText.Replace('https://NanoDesk.', 'https://nanodesk.ru')
-    $normalizedText = $normalizedText.Replace('https://NanoDesk', 'https://nanodesk.ru')
-    $normalizedText = $normalizedText.Replace('rdgen.NanoDesk/privacy.html', 'nanodesk.ru/privacy')
-    $normalizedText = $normalizedText.Replace('https://rdgen.NanoDesk/privacy.html', 'https://nanodesk.ru/privacy')
-    $normalizedText = $normalizedText.Replace('https://rdgen.nanodesk.ru/privacy.html', 'https://nanodesk.ru/privacy')
-    $normalizedText = $normalizedText.Replace('https://nanodesk.ru/privacy.html', 'https://nanodesk.ru/privacy')
+    # Нормализуем только исторические ссылки NanoDesk до канонического домена ТехПульт.
+    $normalizedText = $normalizedText.Replace('https://NanoDesk.', 'https://tehpult.ru')
+    $normalizedText = $normalizedText.Replace('https://NanoDesk', 'https://tehpult.ru')
+    $normalizedText = $normalizedText.Replace('https://nanodesk.ru', 'https://tehpult.ru')
+    $normalizedText = $normalizedText.Replace('rdgen.NanoDesk/privacy.html', 'tehpult.ru/privacy')
+    $normalizedText = $normalizedText.Replace('https://rdgen.NanoDesk/privacy.html', 'https://tehpult.ru/privacy')
+    $normalizedText = $normalizedText.Replace('https://rdgen.nanodesk.ru/privacy.html', 'https://tehpult.ru/privacy')
+    $normalizedText = $normalizedText.Replace('https://tehpult.ru/privacy.html', 'https://tehpult.ru/privacy')
 
     return $normalizedText
 }
@@ -185,7 +186,7 @@ function Test-MsiIntegrity {
             throw 'MSI license dialog text is empty.'
         }
 
-        if ($licenseText.Contains('https://NanoDesk')) {
+        if ($licenseText.Contains('https://NanoDesk') -or $licenseText.Contains('https://nanodesk.ru')) {
             throw 'Legacy NanoDesk URL is still present in MSI license dialog.'
         }
 
@@ -193,8 +194,8 @@ function Test-MsiIntegrity {
             throw 'Legacy privacy URL is still present in MSI license dialog.'
         }
 
-        if (-not $licenseText.Contains('https://nanodesk.ru')) {
-            throw 'Canonical NanoDesk URL is missing in MSI license dialog.'
+        if (-not $licenseText.Contains('https://tehpult.ru')) {
+            throw 'Canonical Tehpult URL is missing in MSI license dialog.'
         }
     }
     finally {

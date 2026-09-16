@@ -54,7 +54,7 @@ def patch_index_html(project_root: Path, template_path: Path) -> None:
 
 
 def patch_index_tis(project_root: Path) -> None:
-    """Переключает меню аккаунта со старого Pro API на NanoDesk Device Flow."""
+    """Переключает меню аккаунта со старого Pro API на Device Flow ТехПульт."""
     index_tis = project_root / "src" / "ui" / "index.tis"
     content = index_tis.read_text(encoding="utf-8")
 
@@ -88,8 +88,166 @@ def patch_index_tis(project_root: Path) -> None:
     index_tis.write_text(content, encoding="utf-8")
 
 
+def patch_dashboard(project_root: Path) -> None:
+    """Добавляет самостоятельные карточки авторизации и поддержки в desktop-экран клиента."""
+    index_tis = project_root / "src" / "ui" / "index.tis"
+    content = index_tis.read_text(encoding="utf-8")
+    panels = '''class AccountPanel: Reactor.Component {
+    function render() {
+        var accountLabel = hasNanodeskSession() ? getNanodeskAccountLabel() : "";
+        return <div .card-account>
+            <div .panel-kicker>ТЕХПУЛЬТ ID</div>
+            <div .title>Авторизация</div>
+            <div .lighter-text>{accountLabel ? "Вы вошли как " + accountLabel + ". Адресная книга синхронизируется между вашими устройствами." : "Войдите, чтобы синхронизировать адресную книгу и управлять устройствами в личном кабинете."}</div>
+            {accountLabel
+                ? <button .button .outline #account-manage>Открыть кабинет</button>
+                : <button .button #account-login>Войти в ТехПульт</button>}
+        </div>;
+    }
+
+    event click $(#account-login) () {
+        nanodeskLogin();
+    }
+
+    event click $(#account-manage) () {
+        handler.open_url("https://tehpult.ru/account");
+    }
+}
+
+class SupportPanel: Reactor.Component {
+    function render() {
+        return <div .card-support>
+            <div .panel-kicker>ПОМОЩЬ РЯДОМ</div>
+            <div .title>Нужна поддержка?</div>
+            <div>Поможем с подключением, установкой и безопасной настройкой удалённого доступа.</div>
+            <button .button .outline #open-support>Открыть поддержку</button>
+        </div>;
+    }
+
+    event click $(#open-support) () {
+        handler.open_url("https://tehpult.ru/support");
+    }
+}
+
+'''
+    content = replace_required(content, "class App: Reactor.Component\n", panels + "class App: Reactor.Component\n", index_tis)
+    content = replace_required(
+        content,
+        '''                        <div .card-connect>
+                            <div .title>{translate('Control Remote Desktop')}</div>
+                            <ID @{this.remote_id} />
+                            <div .right-buttons>
+                                <button .button .outline #file-transfer>{translate('Transfer file')}</button>
+                                <button .button #connect>{translate('Connect')}</button>
+                            </div>
+                        </div>''',
+        '''                        <div .dashboard-cards>
+                            <div .card-connect>
+                                <div .title>{translate('Control Remote Desktop')}</div>
+                                <ID @{this.remote_id} />
+                                <div .right-buttons>
+                                    <button .button .outline #file-transfer>{translate('Transfer file')}</button>
+                                    <button .button #connect>{translate('Connect')}</button>
+                                </div>
+                            </div>
+                            <AccountPanel />
+                            <SupportPanel />
+                        </div>''',
+        index_tis,
+    )
+    index_tis.write_text(content, encoding="utf-8")
+
+
+def patch_dashboard_styles(project_root: Path) -> None:
+    """Оформляет добавленные карточки только средствами, поддерживаемыми Sciter."""
+    stylesheet = project_root / "src" / "ui" / "index.css"
+    content = stylesheet.read_text(encoding="utf-8")
+    content = replace_required(
+        content,
+        '''.right-content {
+    overflow: scroll-indicator;
+    padding: 1.6em;
+    border-spacing: 1.6em;
+    size: *;
+    flow: vertical;
+}
+''',
+        '''.right-content {
+    overflow: scroll-indicator;
+    padding: 1.6em;
+    border-spacing: 1.6em;
+    size: *;
+    flow: vertical;
+}
+
+.dashboard-cards {
+    flow: horizontal;
+    border-spacing: 1em;
+}
+''',
+        stylesheet,
+    )
+    content = replace_required(
+        content,
+        '''.card-connect {
+    @CARD;
+    width: 320px;
+}
+''',
+        '''.card-connect {
+    @CARD;
+    width: 320px;
+}
+
+.card-account {
+    @CARD;
+    width: 280px;
+    min-height: 130px;
+}
+
+.card-support {
+    @CARD;
+    width: 280px;
+    min-height: 130px;
+    color: white;
+    background: #0d5bd7;
+}
+
+.card-support .title,
+.card-support .panel-kicker {
+    color: white;
+}
+
+.card-support .button.outline {
+    color: white;
+    border-color: rgba(255, 255, 255, .7);
+}
+
+.panel-kicker {
+    color: #155eef;
+    font-size: .72em;
+    font-weight: 700;
+    letter-spacing: .1em;
+}
+
+.card-account .lighter-text,
+.card-support > div:nth-child(3) {
+    min-height: 3.6em;
+    padding-top: .35em;
+}
+
+.card-account > button,
+.card-support > button {
+    margin-top: .8em;
+}
+''',
+        stylesheet,
+    )
+    stylesheet.write_text(content, encoding="utf-8")
+
+
 def patch_address_book(project_root: Path) -> None:
-    """Направляет штатный интерфейс адресной книги в NanoDesk API с отдельным Bearer-токеном."""
+    """Направляет штатный интерфейс адресной книги в API ТехПульт с отдельным Bearer-токеном."""
     address_book = project_root / "src" / "ui" / "ab.tis"
     content = address_book.read_text(encoding="utf-8")
     replacements = (
@@ -108,7 +266,7 @@ def patch_address_book(project_root: Path) -> None:
 
 
 def patch_flutter_login(project_root: Path) -> None:
-    """Заменяет password/Google/WebAuthn-форму Flutter на единый браузерный вход NanoDesk."""
+    """Заменяет password/Google/WebAuthn-форму Flutter на единый браузерный вход ТехПульт."""
     login_file = project_root / "flutter" / "lib" / "common" / "widgets" / "login.dart"
     content = login_file.read_text(encoding="utf-8")
 
@@ -116,18 +274,19 @@ def patch_flutter_login(project_root: Path) -> None:
         r"final opLabel = \{\s*'github': 'GitHub',\s*'gitlab': 'GitLab'\s*\}"
         r"\[op\.toLowerCase\(\)\] \?\?\s*toCapitalized\(op\);"
     )
-    content, replacements = label_pattern.subn(
+    content, _ = label_pattern.subn(
         """final opLabel = {
           'github': 'GitHub',
           'gitlab': 'GitLab',
-          'nanodesk': 'NanoDesk ID'
+          'nanodesk': 'ТехПульт ID',
+          'tehpult': 'ТехПульт ID',
+          'техпульт': 'ТехПульт ID'
         }[op.toLowerCase()] ??
         toCapitalized(op);""",
         content,
         count=1,
     )
-    if replacements != 1:
-        raise RuntimeError(f"Не найден label провайдера в {login_file}")
+    # В 1.4.9 карта названий провайдеров удалена upstream: имя «ТехПульт» приходит из login-options.
 
     auth_widget_pattern = re.compile(
         r"    thirdAuthWidget\(\) => Obx\(\(\) \{.*?\n        \}\);\n\n"
@@ -148,7 +307,7 @@ def patch_flutter_login(project_root: Path) -> None:
                   // Rust-слой уже сохранил отзывной токен после браузерного подтверждения.
                   resp = gFFI.userModel.getLoginResponseFromAuthBody(authBody);
                 } catch (e) {
-                  debugPrint('Failed to parse NanoDesk login body: "$authBody"');
+                  debugPrint('Failed to parse Tehpult login body: "$authBody"');
                 }
                 close(true);
                 if (resp != null) {
@@ -177,12 +336,12 @@ def patch_flutter_login(project_root: Path) -> None:
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: const Color(0xff4f46e5),
+              color: const Color(0xff126bff),
               borderRadius: BorderRadius.circular(16),
             ),
             alignment: Alignment.center,
             child: const Text(
-              'N',
+              'ТП',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 30,
@@ -192,7 +351,7 @@ def patch_flutter_login(project_root: Path) -> None:
           ),
           const SizedBox(height: 16),
           Text(
-            'Вход в NanoDesk',
+            'Вход в ТехПульт',
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 8),
@@ -215,7 +374,7 @@ def patch_flutter_login(project_root: Path) -> None:
 
 
 def parse_arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Внедряет NanoDesk Device Authorization в Windows-клиент")
+    parser = argparse.ArgumentParser(description="Внедряет авторизацию ТехПульт в клиент")
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
     parser.add_argument("--template", type=Path, default=Path("nanodesk_client_auth.tis"))
     return parser.parse_args()
@@ -231,9 +390,11 @@ def main() -> None:
 
     patch_index_html(project_root, template_path)
     patch_index_tis(project_root)
+    patch_dashboard(project_root)
+    patch_dashboard_styles(project_root)
     patch_address_book(project_root)
     patch_flutter_login(project_root)
-    print("NanoDesk client authorization patch applied")
+    print("ТехПульт client authorization patch applied")
 
 
 if __name__ == "__main__":

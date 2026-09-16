@@ -1,5 +1,5 @@
-const nanodesk_account_api = "https://nanodesk.ru/api/v1/client-auth";
-const nanodesk_address_book_api = "https://nanodesk.ru/api/v1/address-book";
+const nanodesk_account_api = "https://s1.tehpult.ru/api/v1/client-auth";
+const nanodesk_address_book_api = "https://s1.tehpult.ru/api/v1/address-book";
 var nanodesk_auth_polling = false;
 
 function hasNanodeskSession() {
@@ -9,13 +9,13 @@ function hasNanodeskSession() {
 function getNanodeskAccountLabel() {
     try {
         var user = JSON.parse(handler.get_local_option("nanodesk_user_info"));
-        return (user.displayName || user.email || "NanoDesk").trim();
+        return (user.displayName || user.email || "ТехПульт").trim();
     } catch (_) {}
     return "";
 }
 
 function setNanodeskSession(data) {
-    // Токены NanoDesk не заменяют legacy access_token, участвующий в сетевом протоколе клиента.
+    // Токены ТехПульт не заменяют legacy access_token, участвующий в сетевом протоколе клиента.
     handler.set_local_option("nanodesk_access_token", data.accessToken || "");
     handler.set_local_option("nanodesk_refresh_token", data.refreshToken || "");
     handler.set_local_option("nanodesk_user_info", JSON.stringify(data.user || {}));
@@ -44,17 +44,17 @@ function nanodeskLogin() {
     httpRequest(nanodesk_account_api + "/device", #post, {
         fingerprint: handler.get_uuid(),
         rustdeskId: my_id,
-        name: deviceInfo.name || "NanoDesk",
+        name: deviceInfo.name || "ТехПульт",
         platform: deviceInfo.os || OS
     }, function(data) {
         if (!data.deviceCode || !data.verificationUriComplete) {
             nanodesk_auth_polling = false;
-            msgbox("custom-error", "NanoDesk", "Сервер вернул неполный ответ авторизации");
+            msgbox("custom-error", "ТехПульт", "Сервер вернул неполный ответ авторизации");
             return;
         }
 
         handler.open_url(data.verificationUriComplete);
-        msgbox("custom-nanodesk-login", "Вход в NanoDesk", <div .form>
+        msgbox("custom-nanodesk-login", "Вход в ТехПульт", <div .form>
             <div style="text-align:center; font-size:1.05em; line-height:1.5;">Подтвердите вход в открывшемся браузере.</div>
             <div style="text-align:center; font-size:1.6em; font-weight:bold; letter-spacing:0.12em; margin:0.7em 0;">{data.userCode}</div>
             <div style="text-align:center; color:#777;">Окно закроется автоматически после подтверждения.</div>
@@ -65,7 +65,7 @@ function nanodeskLogin() {
         pollNanodeskAuthorization(data.deviceCode, data.interval || 3);
     }, function(err, status) {
         nanodesk_auth_polling = false;
-        msgbox("custom-error", "NanoDesk", err || "Не удалось начать вход");
+        msgbox("custom-error", "ТехПульт", err || "Не удалось начать вход");
     });
 }
 
@@ -80,17 +80,17 @@ function pollNanodeskAuthorization(deviceCode, interval) {
             setNanodeskSession(data);
             nanodesk_auth_polling = false;
             closeMsgbox();
-            msgbox("custom-nanodesk-success", "Вход выполнен", "Устройство связано с вашим аккаунтом NanoDesk.");
+            msgbox("custom-nanodesk-success", "Вход выполнен", "Устройство связано с вашим аккаунтом ТехПульт.");
             return;
         }
 
         nanodesk_auth_polling = false;
         closeMsgbox();
-        msgbox("custom-error", "NanoDesk", data.status == "denied" ? "Запрос отклонён в браузере" : "Код подтверждения истёк. Начните вход ещё раз.");
+        msgbox("custom-error", "ТехПульт", data.status == "denied" ? "Запрос отклонён в браузере" : "Код подтверждения истёк. Начните вход ещё раз.");
     }, function(err, status) {
         nanodesk_auth_polling = false;
         closeMsgbox();
-        msgbox("custom-error", "NanoDesk", err || "Не удалось проверить подтверждение");
+        msgbox("custom-error", "ТехПульт", err || "Не удалось проверить подтверждение");
     });
 }
 

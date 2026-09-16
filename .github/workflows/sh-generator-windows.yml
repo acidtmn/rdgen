@@ -151,7 +151,7 @@ jobs:
           Invoke-WebRequest -Uri $patchUrl -OutFile apply_russian_distribution.py
           python apply_russian_distribution.py
 
-      - name: Apply NanoDesk client authorization
+      - name: Apply Tehpult client authorization
         shell: pwsh
         run: |
           $patchBase = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches"
@@ -253,28 +253,29 @@ jobs:
           sed -i -e 's|https://rustdesk.com/download|${{ env.downloadLink }}|' ./flutter/lib/mobile/pages/connection_page.dart
           sed -i -e 's|https://rustdesk.com/download|${{ env.downloadLink }}|' ./src/ui/index.tis
 
-      - name: force canonical NanoDesk URL in MSI license
+      - name: Force canonical Tehpult URL in MSI license
         continue-on-error: true
         shell: bash
         run: |
-          sed -i -e 's|https://NanoDesk\.|https://nanodesk.ru|g' ./res/msi/Package/License.rtf
-          sed -i -e 's|https://NanoDesk|https://nanodesk.ru|g' ./res/msi/Package/License.rtf
-          sed -i -e 's|Информационная страница: NanoDesk\.|Информационная страница: https://nanodesk.ru.|g' ./res/msi/Package/License.rtf
+          sed -i -e 's|https://NanoDesk\.|https://tehpult.ru|g' ./res/msi/Package/License.rtf
+          sed -i -e 's|https://NanoDesk|https://tehpult.ru|g' ./res/msi/Package/License.rtf
+          sed -i -e 's|https://nanodesk\.ru|https://tehpult.ru|g' ./res/msi/Package/License.rtf
+          sed -i -e 's|Информационная страница: NanoDesk\.|Информационная страница: https://tehpult.ru.|g' ./res/msi/Package/License.rtf
 
       - name: verify final MSI license text
         continue-on-error: false
         shell: bash
         run: |
-          if grep -q 'https://NanoDesk' ./res/msi/Package/License.rtf; then
-            echo "Broken NanoDesk URL still present in License.rtf"
+          if grep -Eq 'https://(NanoDesk|nanodesk\.ru)' ./res/msi/Package/License.rtf; then
+            echo "Legacy NanoDesk URL is still present in License.rtf"
             exit 1
           fi
           if grep -q 'privacy.html' ./res/msi/Package/License.rtf; then
             echo "Privacy URL still present in License.rtf"
             exit 1
           fi
-          if ! grep -q 'https://nanodesk.ru' ./res/msi/Package/License.rtf; then
-            echo "Canonical NanoDesk URL missing in License.rtf"
+          if ! grep -q 'https://tehpult.ru' ./res/msi/Package/License.rtf; then
+            echo "Canonical Tehpult URL missing in License.rtf"
             exit 1
           fi
 

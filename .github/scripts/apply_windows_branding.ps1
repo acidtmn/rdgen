@@ -21,7 +21,10 @@ param(
     [string]$LogoUuid = "",
 
     [Parameter(Mandatory = $false)]
-    [string]$LogoFileName = ""
+    [string]$LogoFileName = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$BrandName = "ТехПульт"
 )
 
 Set-StrictMode -Version Latest
@@ -271,7 +274,7 @@ function New-MsiBitmaps {
 
             $bannerBrandTextFont = [System.Drawing.Font]::new("Segoe UI", 10, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
             $bannerBrandTextBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml("#2f3542"))
-            $bannerGraphics.DrawString("NanoDesk", $bannerBrandTextFont, $bannerBrandTextBrush, 390, 18)
+            $bannerGraphics.DrawString($BrandName, $bannerBrandTextFont, $bannerBrandTextBrush, 390, 18)
             $bannerBrandTextFont.Dispose()
             $bannerBrandTextBrush.Dispose()
 
@@ -316,7 +319,7 @@ function New-MsiBitmaps {
 
             $dialogBrandTextFont = [System.Drawing.Font]::new("Segoe UI", 11, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
             $dialogBrandTextBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml("#2f3542"))
-            $dialogGraphics.DrawString("NanoDesk", $dialogBrandTextFont, $dialogBrandTextBrush, 64, 154)
+            $dialogGraphics.DrawString($BrandName, $dialogBrandTextFont, $dialogBrandTextBrush, 64, 154)
             $dialogBrandTextFont.Dispose()
             $dialogBrandTextBrush.Dispose()
 
