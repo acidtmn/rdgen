@@ -463,7 +463,7 @@ class TehpultDesktopActionStrip extends StatelessWidget {
             ),
           ],
         ),
-      ),
+      );
     });
     }
 }
