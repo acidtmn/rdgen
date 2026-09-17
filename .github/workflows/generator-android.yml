@@ -18,6 +18,11 @@ on:
         required: false
         default: ''
         type: string
+      reuse_run_id:
+        description: 'completed workflow run containing compatible bridge and native libraries'
+        required: false
+        default: ''
+        type: string
 
 
 env:
@@ -58,12 +63,14 @@ jobs:
     secrets: inherit
 
   generate-bridge-linux:
+    if: ${{ inputs.reuse_run_id == '' }}
     uses: ./.github/workflows/bridge.yml
     with:
       version: ${{ inputs.version }}
 
   build-rustdesk-android:
     needs: [generate-bridge-linux, setup]
+    if: ${{ always() && needs.setup.result == 'success' && (needs.generate-bridge-linux.result == 'success' || inputs.reuse_run_id != '') }}
     name: build rustdesk android apk ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
     strategy:
@@ -240,6 +247,7 @@ jobs:
           add-to-path: true
 
       - name: Setup vcpkg with Github Actions binary cache
+        if: ${{ inputs.reuse_run_id == '' }}
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgDirectory: /opt/artifacts/vcpkg
@@ -247,6 +255,7 @@ jobs:
           doNotCache: false
 
       - name: Install vcpkg dependencies
+        if: ${{ inputs.reuse_run_id == '' }}
         run: |
           case ${{ matrix.job.target }} in
             aarch64-linux-android)
@@ -290,18 +299,31 @@ jobs:
         shell: bash
 
       - name: Restore bridge files
+        if: ${{ inputs.reuse_run_id == '' }}
         uses: actions/download-artifact@v4
         with:
           name: bridge-artifact
           path: ./
 
+      - name: Restore bridge files from previous run
+        if: ${{ inputs.reuse_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: bridge-artifact
+          path: ./
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+
       - name: Install Rust toolchain
+        if: ${{ inputs.reuse_run_id == '' }}
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: "rustfmt"
 
       - uses: Swatinem/rust-cache@v2
+        if: ${{ inputs.reuse_run_id == '' }}
         with:
           prefix-key: rustdesk-lib-cache-android # TODO: drop '-android' part after caches are invalidated
           key: ${{ matrix.job.target }}
@@ -481,6 +503,7 @@ jobs:
       ##########################################################
 
       - name: Build rustdesk lib
+        if: ${{ inputs.reuse_run_id == '' }}
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
@@ -511,10 +534,21 @@ jobs:
           esac
 
       - name: Upload Rustdesk library to Artifacts
+        if: ${{ inputs.reuse_run_id == '' }}
         uses: actions/upload-artifact@v4
         with:
           name: librustdesk.so.${{ matrix.job.target }}
           path: ./target/${{ matrix.job.target }}/release/liblibrustdesk.so
+
+      - name: Restore Rustdesk library from previous run
+        if: ${{ inputs.reuse_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: librustdesk.so.${{ matrix.job.target }}
+          path: ./target/${{ matrix.job.target }}/release
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
 
       - name: icons
         if: ${{ env.iconlink_url != 'false' }}
@@ -663,14 +697,3 @@ jobs:
           path: release-apk/${{ env.filename }}-${{ matrix.job.arch }}.apk
           if-no-files-found: error
           retention-days: 7
-
-  cleanup:
-    needs: [build-rustdesk-android]
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    if: always()
-    steps:
-      - name: Delete secrets artifact
-        uses: geekyeggo/delete-artifact@v5
-        with:
-          name: encrypted-secrets-zip
