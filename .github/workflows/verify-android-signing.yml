@@ -26,9 +26,11 @@ jobs:
           signed_apk="$RUNNER_TEMP/signing-probe-signed.apk"
 
           printf '%s' "$ANDROID_SIGNING_KEY" | base64 --decode > "$key_store"
+          echo "SIGNING_STAGE=keystore-decoded"
           printf 'Tehpult Android signing probe' > "$RUNNER_TEMP/probe.txt"
           (cd "$RUNNER_TEMP" && zip -q "$unsigned_apk" probe.txt)
           "$build_tools/zipalign" -f 4 "$unsigned_apk" "$aligned_apk"
+          echo "SIGNING_STAGE=probe-aligned"
 
           # DER-отпечаток сертификата из контейнера должен совпасть с утверждённым secret.
           openssl pkcs12 \
@@ -37,12 +39,14 @@ jobs:
             -clcerts \
             -nokeys \
             | openssl x509 -outform DER > "$certificate_der"
+          echo "SIGNING_STAGE=certificate-exported"
           key_store_digest="$(openssl dgst -sha256 "$certificate_der" | awk '{print toupper($NF)}')"
           expected_digest="$(printf '%s' "$ANDROID_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')"
           if [ "$key_store_digest" != "$expected_digest" ]; then
             echo "The approved certificate does not match the signing key store" >&2
             exit 1
           fi
+          echo "SIGNING_STAGE=certificate-approved"
 
           "$build_tools/apksigner" sign \
             --min-sdk-version 21 \
@@ -52,6 +56,7 @@ jobs:
             --key-pass "env:ANDROID_KEY_PASSWORD" \
             --out "$signed_apk" \
             "$aligned_apk"
+          echo "SIGNING_STAGE=probe-signed"
 
           verification="$($build_tools/apksigner verify \
             --min-sdk-version 21 \
@@ -59,6 +64,7 @@ jobs:
             --print-certs \
             "$signed_apk" 2>&1)"
           printf '%s\n' "$verification"
+          echo "SIGNING_STAGE=signature-report-created"
           signed_digest="$(printf '%s\n' "$verification" \
             | awk -F': ' '/certificate SHA-256 digest/{print toupper($2); exit}')"
           if [ -z "$signed_digest" ] || [ "$signed_digest" != "$key_store_digest" ]; then
