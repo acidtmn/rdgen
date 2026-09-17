@@ -58,7 +58,8 @@ class AndroidBrandingTest(unittest.TestCase):
             with zipfile.ZipFile(apk, "w") as archive:
                 archive.writestr(VERIFY.APK_ICON_PATH, png_payload(marker=b"foreign"))
                 archive.writestr(VERIFY.APK_LOGO_PATH, (branding / "logo.png").read_bytes())
-                archive.writestr("res/mipmap-xhdpi-v4/ic_launcher.png", b"x" * 256)
+                # AAPT часто преобразует исходный launcher PNG в WebP при упаковке APK.
+                archive.writestr("res/mipmap-xhdpi-v4/ic_launcher.webp", b"x" * 256)
                 archive.writestr("padding.bin", bytes(range(256)) * 4_100)
 
             with self.assertRaisesRegex(RuntimeError, "не совпадает"):

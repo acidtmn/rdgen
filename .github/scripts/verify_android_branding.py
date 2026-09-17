@@ -8,6 +8,7 @@ from pathlib import Path
 
 APK_ICON_PATH = "assets/flutter_assets/assets/icon.png"
 APK_LOGO_PATH = "assets/flutter_assets/assets/logo.png"
+LAUNCHER_RESOURCE_EXTENSIONS = (".png", ".webp", ".xml")
 
 
 def sha256(payload: bytes) -> str:
@@ -45,12 +46,14 @@ def verify_apk(root: Path, apk_path: Path) -> None:
         assert_asset_matches(archive, APK_ICON_PATH, icon)
         assert_asset_matches(archive, APK_LOGO_PATH, logo)
 
-        # Android может переименовать каталоги плотности при упаковке, поэтому проверяем
-        # все launcher PNG по имени файла, а не по жёстко заданному mipmap-каталогу.
+        # AAPT может сохранить PNG, преобразовать его в WebP или упаковать adaptive icon
+        # как XML, поэтому проверяем все допустимые launcher-ресурсы по имени.
         launcher_icons = [
             name
             for name in archive.namelist()
-            if name.startswith("res/mipmap") and "ic_launcher" in name and name.endswith(".png")
+            if name.startswith("res/mipmap")
+            and "ic_launcher" in name
+            and name.lower().endswith(LAUNCHER_RESOURCE_EXTENSIONS)
         ]
         if not launcher_icons:
             raise RuntimeError("В APK не найдены launcher-иконки Android")
