@@ -658,9 +658,23 @@ jobs:
           aligned_apk="signed-apk/${{ env.filename }}-${{ matrix.job.arch }}-aligned.apk"
           final_apk="release-apk/${{ env.filename }}-${{ matrix.job.arch }}.apk"
           key_store="$RUNNER_TEMP/tehpult-android-release.p12"
+          certificate_der="$RUNNER_TEMP/tehpult-android-release.der"
 
           printf '%s' "$ANDROID_SIGNING_KEY" | base64 --decode > "$key_store"
           chmod 600 "$key_store"
+          openssl pkcs12 \
+            -in "$key_store" \
+            -passin env:ANDROID_KEY_STORE_PASSWORD \
+            -clcerts \
+            -nokeys \
+            | openssl x509 -outform DER > "$certificate_der"
+          approved="$(openssl dgst -sha256 "$certificate_der" | awk '{print toupper($NF)}')"
+          expected="$(printf '%s' "$ANDROID_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')"
+          if [ -z "$approved" ] || [ "$approved" != "$expected" ]; then
+            echo "Android signing key does not contain the approved certificate" >&2
+            exit 1
+          fi
+
           mkdir -p release-apk
           "$build_tools/zipalign" -f -v 4 "$source_apk" "$aligned_apk"
           "$build_tools/apksigner" sign \
@@ -671,24 +685,14 @@ jobs:
             --out "$final_apk" \
             "$aligned_apk"
 
-          certificate="$($build_tools/apksigner verify --verbose --print-certs "$final_apk" \
-            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
-            | head -n 1 \
-            | tr '[:lower:]' '[:upper:]')"
-          expected="$(printf '%s' "$ANDROID_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')"
-          actual="$(printf '%s' "$certificate" | tr -d ':[:space:]')"
-          if [ -z "$actual" ] || [ "$actual" != "$expected" ]; then
-            echo "Android signing certificate does not match the approved certificate" >&2
-            exit 1
-          fi
-
+          "$build_tools/apksigner" verify --verbose --print-certs "$final_apk"
           badging="$($build_tools/aapt dump badging "$final_apk")"
           printf '%s\n' "$badging" | grep -F "package: name='${androidappid}'"
           printf '%s\n' "$badging" | grep -F "versionName='${VERSION}'"
           printf '%s\n' "$badging" | grep -F "application-label:'${appname}'"
           printf '%s\n' "$badging" | grep -E "^application-icon-[0-9]+:'.+'$"
           "$build_tools/zipalign" -c -v 4 "$final_apk"
-          rm -f "$key_store" "$aligned_apk"
+          rm -f "$key_store" "$certificate_der" "$aligned_apk"
 
       - name: Upload final Android APK
         uses: actions/upload-artifact@v4
