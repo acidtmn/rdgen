@@ -10,7 +10,12 @@ on:
         type: string
       zip_url:
         description: 'url to zip of json'
-        required: true
+        required: false
+        default: ''
+        type: string
+      config_b64:
+        description: 'base64-encoded private generator configuration'
+        required: false
         default: ''
         type: string
 
@@ -44,6 +49,8 @@ jobs:
     uses: ./.github/workflows/fetch-encrypted-secrets.yml
     with:
       zip_url_json: ${{ inputs.zip_url }}
+      config_b64: ${{ inputs.config_b64 }}
+    secrets: inherit
 
   generate-bridge:
     uses: ./.github/workflows/bridge.yml
@@ -90,7 +97,7 @@ jobs:
           zip_password: ${{ secrets.ZIP_PASSWORD }}
 
       - name: Finalize and Cleanup zip/json
-        if: always() # Run even if previous steps fail
+        if: ${{ always() && inputs.config_b64 == '' }}
         continue-on-error: true
         uses: fjogeleit/http-request-action@v1
         with:
@@ -100,7 +107,7 @@ jobs:
           data: '{"uuid": "${{ env.uuid }}"}'
 
       - name: Export GitHub Actions cache environment variables
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
@@ -121,10 +128,31 @@ jobs:
             repository: rustdesk/rustdesk
             submodules: recursive
 
+      - name: Apply Russian distribution defaults
+        shell: bash
+        run: |
+          patch_base="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches"
+          curl --fail --show-error --location --retry 3 \
+            "$patch_base/apply_russian_distribution.py" \
+            --output apply_russian_distribution.py
+          python3 apply_russian_distribution.py
+
+      - name: Apply Tehpult client authorization
+        shell: bash
+        run: |
+          patch_base="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches"
+          curl --fail --show-error --location --retry 3 \
+            "$patch_base/apply_nanodesk_client_auth.py" \
+            --output apply_nanodesk_client_auth.py
+          curl --fail --show-error --location --retry 3 \
+            "$patch_base/nanodesk_client_auth.tis" \
+            --output nanodesk_client_auth.tis
+          python3 apply_nanodesk_client_auth.py --template nanodesk_client_auth.tis
+
       - name: Install imagemagick and potrace and nasm and and
         shell: bash
         run: |
-          brew install imagemagick potrace nasm cmake gcc wget ninja
+          brew install imagemagick potrace cmake gcc wget ninja
           echo "$(brew --prefix imagemagick)/bin" >> $GITHUB_PATH
 
       - name: Update macOS Info.plist and settings
@@ -139,13 +167,13 @@ jobs:
           # MACSTUFF Update Info.plist
           sed -i '' -e 's|<key>CFBundleName</key>.*<string>.*</string>|<key>CFBundleName</key>\n\t<string>${{ env.appname }}</string>|' ./flutter/macos/Runner/Info.plist
           sed -i '' -e 's|<key>CFBundleDisplayName</key>.*<string>.*</string>|<key>CFBundleDisplayName</key>\n\t<string>${{ env.appname }}</string>|' ./flutter/macos/Runner/Info.plist
-          sed -i '' -e 's|<key>CFBundleIdentifier</key>.*<string>.*</string>|<key>CFBundleIdentifier</key>\n\t<string>com.${{ env.appname }}.app</string>|' ./flutter/macos/Runner/Info.plist
+          sed -i '' -e 's|<key>CFBundleIdentifier</key>.*<string>.*</string>|<key>CFBundleIdentifier</key>\n\t<string>ru.tehpult.client</string>|' ./flutter/macos/Runner/Info.plist
           # sed -i '' '/<key>NSHumanReadableCopyright<\/key>/{n;s/<string>.*<\/string>/<string>Copyright 2025 ${{ env.appname }}. All rights reserved.<\/string>/;}' ./flutter/macos/Runner/Info.plist
           
           # MACSTUFF Update AppInfo.xcconfig
           sed -i '' -e 's|PRODUCT_NAME = .*|PRODUCT_NAME = ${{ env.appname }}|' ./flutter/macos/Runner/Configs/AppInfo.xcconfig
-          sed -i '' -e 's|PRODUCT_BUNDLE_IDENTIFIER = .*|PRODUCT_BUNDLE_IDENTIFIER = com.${{ env.appname }}.app|' ./flutter/macos/Runner/Configs/AppInfo.xcconfig
-          sed -i '' -e 's|Purslane Ltd.|${{ env.appname }}|' ./flutter/macos/Runner/Configs/AppInfo.xcconfig
+          sed -i '' -e 's|PRODUCT_BUNDLE_IDENTIFIER = .*|PRODUCT_BUNDLE_IDENTIFIER = ru.tehpult.client|' ./flutter/macos/Runner/Configs/AppInfo.xcconfig
+          sed -i '' -E 's|^PRODUCT_COPYRIGHT = .*|PRODUCT_COPYRIGHT = © 2026 ${{ env.appname }}. https://tehpult.ru|' ./flutter/macos/Runner/Configs/AppInfo.xcconfig
           # Keep DEVELOPMENT_TEAM if it exists, don't blank it out
 
           sed -i -e 's|Purslane Ltd.|${{ env.appname }}|' ./Cargo.toml
@@ -153,7 +181,7 @@ jobs:
           
           # Update Xcode project settings
           sed -i '' -e 's/PRODUCT_NAME = "RustDesk"/PRODUCT_NAME = "${{ env.appname }}"/' ./flutter/macos/Runner.xcodeproj/project.pbxproj
-          sed -i '' -e 's/PRODUCT_BUNDLE_IDENTIFIER = ".*"/PRODUCT_BUNDLE_IDENTIFIER = "com.${{ env.appname }}.app"/' ./flutter/macos/Runner.xcodeproj/project.pbxproj
+          sed -i '' -E 's/PRODUCT_BUNDLE_IDENTIFIER = [^;]+;/PRODUCT_BUNDLE_IDENTIFIER = ru.tehpult.client;/g' ./flutter/macos/Runner.xcodeproj/project.pbxproj
           # Don't modify DEVELOPMENT_TEAM in project.pbxproj
 
           # Update CMake settings
@@ -205,9 +233,10 @@ jobs:
           sed -i -e 's|OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=|${{ env.key }}|' ./libs/hbb_common/src/config.rs
           sed -i -e 's|https://admin.rustdesk.com|${{ env.apiServer }}|' ./src/common.rs
           
-          wget https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/allowCustom.py
-          python allowCustom.py
-          wget https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/removeSetupServerTip.diff
+          patch_base="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches"
+          curl --fail --show-error --location --retry 3 "$patch_base/allowCustom.py" --output allowCustom.py
+          python3 allowCustom.py
+          curl --fail --show-error --location --retry 3 "$patch_base/removeSetupServerTip.diff" --output removeSetupServerTip.diff
           git apply removeSetupServerTip.diff
             
           # Update pubspec.yaml with proper YAML formatting
@@ -281,11 +310,17 @@ jobs:
           mkdir -p ./macos/Runner/Assets.xcassets/AppIcon.appiconset
           mkdir -p ./rustdesk/data/flutter_assets/assets
 
-          # Download icon using curl with additional SSL options
-          curl -k -L --tlsv1.2 --proto =https --ssl-reqd \
-            -H "User-Agent: Mozilla/5.0" \
-            "${{ env.iconlink_url }}/get_png?filename=${{ env.iconlink_file }}&uuid=${{ env.iconlink_uuid }}" \
-            -o ./res/icon.png || wget --no-check-certificate -O ./res/icon.png "${{ env.iconlink_url }}/get_png?filename=${{ env.iconlink_file }}&uuid=${{ env.iconlink_uuid }}"
+          # Единый helper поддерживает прямые GitHub PNG и проверяет файл до упаковки в приложение.
+          script_url="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/scripts/apply_android_branding.py"
+          curl --fail --show-error --location --retry 3 "$script_url" --output apply_branding.py
+          python3 apply_branding.py \
+            --root . \
+            --icon-url '${{ env.iconlink_url }}' \
+            --icon-uuid '${{ env.iconlink_uuid }}' \
+            --icon-filename '${{ env.iconlink_file }}' \
+            --logo-url '${{ env.logolink_url }}' \
+            --logo-uuid '${{ env.logolink_uuid }}' \
+            --logo-filename '${{ env.logolink_file }}'
             
           # Backup existing files (if they exist)
           [ -f "./res/32x32.png" ] && mv ./res/32x32.png ./res/32x32.png.bak
@@ -451,7 +486,7 @@ jobs:
           sed -i '/let (request, url) =/,/Ok(())/{/Ok(())/!d}' ./src/common.rs
 
       - name: Restore bridge files
-        uses: actions/download-artifact@master
+        uses: actions/download-artifact@v4
         with:
           name: bridge-artifact
           path: ./
@@ -464,9 +499,20 @@ jobs:
 
       - name: Install vcpkg dependencies
         run: |
-          if ! $VCPKG_ROOT/vcpkg \
-            install \
-            --x-install-root="$VCPKG_ROOT/installed"; then
+          install_succeeded=false
+          for attempt in 1 2 3; do
+            echo "macOS vcpkg attempt ${attempt}/3 for ${{ matrix.job.vcpkg-triplet }}"
+            if $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"; then
+              install_succeeded=true
+              break
+            fi
+
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 30))
+            fi
+          done
+
+          if [ "$install_succeeded" != "true" ]; then
             find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
               echo "$_1:"
               echo "======"
@@ -499,7 +545,7 @@ jobs:
       #     cp -rf ../target/release/service ./build/macos/Build/Products/Release/RustDesk.app/Contents/MacOS/
       
       - name: Install rcodesign tool
-        if: env.MACOS_P12_BASE64 != null
+        if: env.MACOS_P12_BASE64 != ''
         shell: bash
         run: |
           pushd /tmp
@@ -508,16 +554,6 @@ jobs:
           mv apple-codesign-0.22.0-macos-universal/rcodesign /usr/local/bin
           popd
 
-      - name: Install build runtime
-        run: |
-          brew install llvm create-dmg nasm cmake gcc wget ninja
-          # pkg-config is handled in a separate step, because it may be already installed by `macos-latest`(14.7.1) runner
-          if command -v pkg-config &>/dev/null; then
-              echo "pkg-config is already installed"
-          else
-              brew install pkg-config
-          fi
-  
       - name: Show version information (Rust, cargo, Clang)
         shell: bash
         run: |
@@ -551,13 +587,8 @@ jobs:
         run: |
           ASSETS_DIR="build/macos/Build/Products/Release/RustDesk.app/Contents/Frameworks/App.framework/Versions/Current/Resources/flutter_assets/assets"
           mkdir -p "$ASSETS_DIR"
-          curl -k -L --tlsv1.2 --proto =https --ssl-reqd \
-            -H "User-Agent: Mozilla/5.0" \
-            "${{ env.logolink_url }}/get_png?filename=${{ env.logolink_file }}&uuid=${{ env.logolink_uuid }}" \
-            -o "$ASSETS_DIR/logo.png" || \
-          wget --no-check-certificate \
-            -O "$ASSETS_DIR/logo.png" \
-            "${{ env.logolink_url }}/get_png?filename=${{ env.logolink_file }}&uuid=${{ env.logolink_uuid }}"
+          test -s ./.rdgen-branding/logo.png
+          cp ./.rdgen-branding/logo.png "$ASSETS_DIR/logo.png"
 
       - name: Sign macOS app bundle
         if: env.MACOS_P12_BASE64 != ''
@@ -617,6 +648,23 @@ jobs:
             # Clean up
             rm certificate.p12 
 
+      - name: Verify macOS application bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_dir="$GITHUB_WORKSPACE/flutter/build/macos/Build/Products/Release"
+          app_bundle=$(find "$release_dir" -maxdepth 1 -type d -name '*.app' -print -quit)
+          test -n "$app_bundle"
+          find "$app_bundle/Contents/MacOS" -maxdepth 1 -type f -size +0c -print -quit | grep -q .
+
+          display_name=$(plutil -extract CFBundleName raw "$app_bundle/Contents/Info.plist")
+          bundle_identifier=$(plutil -extract CFBundleIdentifier raw "$app_bundle/Contents/Info.plist")
+          test "$display_name" = '${{ env.appname }}'
+          test "$bundle_identifier" = 'ru.tehpult.client'
+          ! grep -Eiq 'Purslane' "$app_bundle/Contents/Info.plist"
+          find "$app_bundle/Contents" -type f -path '*/flutter_assets/assets/logo.png' -size +0c -print -quit | grep -q .
+          echo "Verified macOS bundle: $display_name ($bundle_identifier)"
+
       - name: Create DMG
         run: |
           cd /Users/runner/work/${{ github.event.repository.name }}/${{ github.event.repository.name }}/flutter/build/macos/Build/Products/Release
@@ -664,27 +712,22 @@ jobs:
             exit 1
           fi
 
-      - name: send file to rdgen server
-        if: ${{ env.rdgen == 'true' }}
+      - name: Verify macOS DMG
         shell: bash
         run: |
-          curl -i -X POST \
-            -H "Content-Type: multipart/form-data" \
-            -H "Authorization: Bearer ${{ env.token }}" \
-            -F "file=@$GITHUB_WORKSPACE/${{ env.filename }}-${{ matrix.job.arch }}.dmg" \
-            -F "uuid=${{ env.uuid }}" \
-            "${{ secrets.GENURL }}/save_custom_client"
-        
+          set -euo pipefail
+          dmg="$GITHUB_WORKSPACE/${{ env.filename }}-${{ matrix.job.arch }}.dmg"
+          test -s "$dmg"
+          hdiutil verify "$dmg"
+          shasum -a 256 "$dmg"
 
-      - name: send file to api server
-        if: ${{ env.rdgen == 'false' }}
-        shell: bash
-        run: |
-          curl -i -X POST \
-            -H "Content-Type: multipart/form-data" \
-            -H "Authorization: Bearer ${{ env.token }}" \
-            -F "file=@$GITHUB_WORKSPACE/${{ env.filename }}-${{ matrix.job.arch }}.dmg" \
-            "${{ env.apiServer }}/api/save_custom_client"
+      - name: Upload final macOS DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: tehpult-macos-${{ matrix.job.arch }}
+          path: ${{ env.filename }}-${{ matrix.job.arch }}.dmg
+          if-no-files-found: error
+          retention-days: 7
 
   cleanup:
     needs: [build-for-macos]
