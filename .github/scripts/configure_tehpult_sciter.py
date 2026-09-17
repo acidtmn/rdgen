@@ -37,6 +37,16 @@ def replace_required(content: str, old: str, new: str, path: Path) -> str:
     raise RuntimeError(f"В {path} не найден ожидаемый фрагмент: {old[:100]!r}")
 
 
+def replace_one_of_required(content: str, old_values: tuple[str, ...], new: str, path: Path) -> str:
+    """Заменяет одно из известных состояний файла после ранее применённых продуктовых патчей."""
+    for old in old_values:
+        if old in content:
+            return content.replace(old, new, 1)
+    if new in content:
+        return content
+    raise RuntimeError(f"В {path} не найдено ни одно допустимое исходное значение")
+
+
 def configure_package_metadata(root: Path, app_name: str, filename: str, site_url: str) -> None:
     """Настраивает PE-метаданные основного клиента и самораспаковывающегося portable-файла."""
     for relative_path in (Path("Cargo.toml"), Path("libs/portable/Cargo.toml")):
@@ -50,9 +60,16 @@ def configure_package_metadata(root: Path, app_name: str, filename: str, site_ur
         content = replace_required(content, 'OriginalFilename = "rustdesk.exe"', f'OriginalFilename = "{filename}_x86.exe"', path)
 
         # Юридическое поле оставляем нейтральным: только продукт и его официальный сайт.
-        old_copyright = 'LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."'
         new_copyright = f'LegalCopyright = "© 2026 {app_name}. {site_url}"'
-        content = replace_required(content, old_copyright, new_copyright, path)
+        content = replace_one_of_required(
+            content,
+            (
+                'LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."',
+                'LegalCopyright = "tehpult.ru"',
+            ),
+            new_copyright,
+            path,
+        )
         write_text(path, content)
 
     portable_main = root / "libs/portable/src/main.rs"

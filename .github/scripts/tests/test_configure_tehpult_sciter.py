@@ -28,7 +28,10 @@ class ConfigureTehpultSciterTest(unittest.TestCase):
         )
         self.write(
             "libs/portable/Cargo.toml",
-            self.package_metadata(),
+            self.package_metadata().replace(
+                'LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."',
+                'LegalCopyright = "tehpult.ru"',
+            ),
         )
         self.write("libs/portable/src/main.rs", 'const APP_PREFIX: &str = "rustdesk";\n')
         self.write("src/lang/en.rs", 'pub const NAME: &str = "RustDesk Remote Desktop";\n')
