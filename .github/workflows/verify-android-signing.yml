@@ -1,0 +1,69 @@
+name: Verify Android Signing
+run-name: Verify Android Signing
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-signing:
+    runs-on: ubuntu-24.04
+    env:
+      ANDROID_SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
+      ANDROID_SIGNING_ALIAS: ${{ secrets.ANDROID_ALIAS }}
+      ANDROID_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
+    steps:
+      - name: Sign and inspect a minimal APK container
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          key_store="$RUNNER_TEMP/tehpult-android-release.p12"
+          certificate_der="$RUNNER_TEMP/tehpult-android-release.der"
+          unsigned_apk="$RUNNER_TEMP/signing-probe-unsigned.apk"
+          aligned_apk="$RUNNER_TEMP/signing-probe-aligned.apk"
+          signed_apk="$RUNNER_TEMP/signing-probe-signed.apk"
+
+          printf '%s' "$ANDROID_SIGNING_KEY" | base64 --decode > "$key_store"
+          printf 'Tehpult Android signing probe' > "$RUNNER_TEMP/probe.txt"
+          (cd "$RUNNER_TEMP" && zip -q "$unsigned_apk" probe.txt)
+          "$build_tools/zipalign" -f 4 "$unsigned_apk" "$aligned_apk"
+
+          # DER-отпечаток сертификата из контейнера должен совпасть с утверждённым secret.
+          openssl pkcs12 \
+            -in "$key_store" \
+            -passin env:ANDROID_KEY_STORE_PASSWORD \
+            -clcerts \
+            -nokeys \
+            | openssl x509 -outform DER > "$certificate_der"
+          key_store_digest="$(openssl dgst -sha256 "$certificate_der" | awk '{print toupper($NF)}')"
+          expected_digest="$(printf '%s' "$ANDROID_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')"
+          if [ "$key_store_digest" != "$expected_digest" ]; then
+            echo "The approved certificate does not match the signing key store" >&2
+            exit 1
+          fi
+
+          "$build_tools/apksigner" sign \
+            --min-sdk-version 21 \
+            --ks "$key_store" \
+            --ks-key-alias "$ANDROID_SIGNING_ALIAS" \
+            --ks-pass "env:ANDROID_KEY_STORE_PASSWORD" \
+            --key-pass "env:ANDROID_KEY_PASSWORD" \
+            --out "$signed_apk" \
+            "$aligned_apk"
+
+          verification="$($build_tools/apksigner verify \
+            --min-sdk-version 21 \
+            --verbose \
+            --print-certs \
+            "$signed_apk" 2>&1)"
+          printf '%s\n' "$verification"
+          signed_digest="$(printf '%s\n' "$verification" \
+            | awk -F': ' '/certificate SHA-256 digest/{print toupper($2); exit}')"
+          if [ -z "$signed_digest" ] || [ "$signed_digest" != "$key_store_digest" ]; then
+            echo "The signed APK certificate does not match the key store" >&2
+            exit 1
+          fi
+
+          echo "Android production signing verified"
