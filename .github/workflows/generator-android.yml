@@ -652,6 +652,7 @@ jobs:
           printf '%s\n' "$badging" | grep -F "package: name='${androidappid}'"
           printf '%s\n' "$badging" | grep -F "versionName='${VERSION}'"
           printf '%s\n' "$badging" | grep -F "application-label:'${appname}'"
+          printf '%s\n' "$badging" | grep -E "^application-icon-[0-9]+:'.+'$"
           "$build_tools/zipalign" -c -v 4 "$final_apk"
           rm -f "$key_store" "$aligned_apk"
 

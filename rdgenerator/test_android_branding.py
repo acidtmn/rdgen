@@ -58,14 +58,12 @@ class AndroidBrandingTest(unittest.TestCase):
             with zipfile.ZipFile(apk, "w") as archive:
                 archive.writestr(VERIFY.APK_ICON_PATH, png_payload(marker=b"foreign"))
                 archive.writestr(VERIFY.APK_LOGO_PATH, (branding / "logo.png").read_bytes())
-                # AAPT часто преобразует исходный launcher PNG в WebP при упаковке APK.
-                archive.writestr("res/mipmap-xhdpi-v4/ic_launcher.webp", b"x" * 256)
                 archive.writestr("padding.bin", bytes(range(256)) * 4_100)
 
             with self.assertRaisesRegex(RuntimeError, "не совпадает"):
                 VERIFY.verify_apk(root, apk)
 
-    def test_apk_verifier_accepts_approved_assets_and_launcher_icon(self) -> None:
+    def test_apk_verifier_accepts_approved_assets_and_android_resources(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             branding = root / ".rdgen-branding"
@@ -76,11 +74,12 @@ class AndroidBrandingTest(unittest.TestCase):
             (branding / "logo.png").write_bytes(logo)
             apk = root / "tehpult.apk"
 
-            # APK должен содержать одновременно фирменные Flutter assets и launcher-иконку.
+            # APK должен содержать фирменные Flutter assets, manifest и таблицу ресурсов.
             with zipfile.ZipFile(apk, "w") as archive:
                 archive.writestr(VERIFY.APK_ICON_PATH, icon)
                 archive.writestr(VERIFY.APK_LOGO_PATH, logo)
-                archive.writestr("res/mipmap-xhdpi-v4/ic_launcher.png", b"x" * 256)
+                archive.writestr("AndroidManifest.xml", b"x" * 256)
+                archive.writestr("resources.arsc", b"x" * 256)
                 archive.writestr("padding.bin", bytes(range(256)) * 4_100)
 
             VERIFY.verify_apk(root, apk)
