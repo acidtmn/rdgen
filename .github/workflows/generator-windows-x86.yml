@@ -90,6 +90,29 @@ jobs:
           Invoke-WebRequest -Uri $scriptUrl -OutFile configure_tehpult_sciter.py
           python configure_tehpult_sciter.py
 
+      - name: Set Tehpult server, key, and API
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${{ env.server }}"
+          test -n "${{ env.key }}"
+          sed -i -e 's|rs-ny.rustdesk.com|${{ env.server }}|' ./libs/hbb_common/src/config.rs
+          sed -i -e 's|OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=|${{ env.key }}|' ./libs/hbb_common/src/config.rs
+          sed -i -e 's|https://admin.rustdesk.com|${{ env.apiServer }}|' ./src/common.rs
+          grep -Fq '${{ env.server }}' ./libs/hbb_common/src/config.rs
+          grep -Fq '${{ env.key }}' ./libs/hbb_common/src/config.rs
+          grep -Fq '${{ env.apiServer }}' ./src/common.rs
+
+      - name: Keep rendezvous transport compatible with account tokens
+        shell: bash
+        run: |
+          set -euo pipefail
+          occurrences="$(grep -oF '!key.is_empty()' ./src/client.rs | wc -l | tr -d ' ')"
+          test "${occurrences}" = "2"
+          sed -i -e 's|!key.is_empty()|false|' ./src/client.rs
+          ! grep -Fq '!key.is_empty()' ./src/client.rs
+          grep -Fq 'if false && !token.is_empty()' ./src/client.rs
+
       - name: Install ImageMagick
         shell: pwsh
         run: |
