@@ -433,12 +433,15 @@ jobs:
             --ui-rs .\src\ui.rs `
             --image $uiBrandSource
 
-      - name: fix connection delay
-        continue-on-error: true
+      - name: Keep rendezvous transport compatible with account tokens
         if: ${{ env.delayFix == 'true' }}
         shell: bash
         run: |
+          occurrences="$(grep -oF '!key.is_empty()' ./src/client.rs | wc -l | tr -d ' ')"
+          test "${occurrences}" = "2"
           sed -i -e 's|!key.is_empty()|false|' ./src/client.rs
+          ! grep -Fq '!key.is_empty()' ./src/client.rs
+          grep -Fq 'if false && !token.is_empty()' ./src/client.rs
 
       - name: add cycle monitors to toolbar
         if: env.cycleMonitor == 'true'
