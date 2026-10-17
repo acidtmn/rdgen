@@ -470,6 +470,9 @@ jobs:
           $patchUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches/apply_tehpult_transport.py"
           Invoke-WebRequest -Uri $patchUrl -OutFile apply_tehpult_transport.py
           python apply_tehpult_transport.py
+          $installerPatchUrl = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches/apply_tehpult_windows_installer.py"
+          Invoke-WebRequest -Uri $installerPatchUrl -OutFile apply_tehpult_windows_installer.py
+          python apply_tehpult_windows_installer.py
 
       - name: add cycle monitors to toolbar
         # В 1.5.0 переключение мониторов уже реализовано upstream в обеих панелях.

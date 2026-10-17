@@ -1,7 +1,11 @@
 import concurrent.futures
 import importlib.util
+import os
 from pathlib import Path
 import re
+import shutil
+import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
 import urllib.request
@@ -18,6 +22,7 @@ SOURCE_FILES = (
     "flutter/lib/desktop/widgets/remote_toolbar.dart",
     "Cargo.toml", "libs/portable/Cargo.toml", "src/lang/ru.rs", "src/common.rs",
     "src/client.rs", "src/lang.rs", "res/msi/Package/Package.wxs",
+    "src/platform/windows.rs", "src/platform/windows/installer_shell.rs",
     "res/msi/Package/Package.wixproj", "res/msi/Package/License.rtf",
     "res/msi/Package/Language/Package.en-us.wxl",
     "res/msi/Package/Language/WixExt_en-us.wxl",
@@ -37,6 +42,7 @@ class UpstreamWindowsPatchTests(unittest.TestCase):
         cls.auth = load_module("auth_patch", ".github/patches/apply_nanodesk_client_auth.py")
         cls.distribution = load_module("distribution_patch", ".github/patches/apply_russian_distribution.py")
         cls.transport = load_module("transport_patch", ".github/patches/apply_tehpult_transport.py")
+        cls.installer = load_module("installer_patch", ".github/patches/apply_tehpult_windows_installer.py")
 
         # Проверяем реальные исходники тега, не создавая второй checkout или копию проекта.
         def fetch(relative):
@@ -83,6 +89,9 @@ class UpstreamWindowsPatchTests(unittest.TestCase):
             sources[SOURCE_ROOT / "src/client.rs"] = self.transport.patch_transport(
                 sources[SOURCE_ROOT / "src/client.rs"]
             )
+            sources[SOURCE_ROOT / "src/platform/windows.rs"] = self.installer.patch_installer(
+                sources[SOURCE_ROOT / "src/platform/windows.rs"]
+            )
 
         common = sources[SOURCE_ROOT / "src/common.rs"]
         original_common = self.original[SOURCE_ROOT / "src/common.rs"]
@@ -113,6 +122,40 @@ class UpstreamWindowsPatchTests(unittest.TestCase):
         self.assertIn("class _MonitorCycle", toolbar)
         self.assertIn("class _MainMonitorSwitchButton", toolbar)
         self.assertIn("class _MinimizedMonitorSwitchButton", toolbar)
+        self.assertEqual(
+            sources[SOURCE_ROOT / "src/platform/windows/installer_shell.rs"],
+            self.original[SOURCE_ROOT / "src/platform/windows/installer_shell.rs"],
+        )
+
+    def test_installer_accepts_brand_and_rejects_command_injection(self):
+        source = self.installer.patch_installer(self.original[SOURCE_ROOT / "src/platform/windows.rs"])
+        validator = re.search(
+            r"fn validate_install_app_name\(.*?\n\}", source, re.DOTALL,
+        ).group()
+        rustc = shutil.which("rustc")
+        if rustc is None:
+            if os.environ.get("GITHUB_ACTIONS") == "true":
+                self.fail("Для проверки валидатора на runner нужен rustc")
+            self.skipTest("В локальном контейнере нет rustc; проверка выполняется на GitHub runner")
+        harness = '''type ResultType<T> = Result<T, &'static str>;
+macro_rules! bail { ($message:expr) => { return Err($message) }; }
+''' + validator + '''
+fn main() {
+    for name in ["ТехПульт", "RustDesk-Admin1", "tehpult"] {
+        assert!(validate_install_app_name(name).is_ok());
+    }
+    for name in ["", "ТехПульт&whoami", "ТехПульт%PATH%", "ТехПульт\\n", "ТехПульт|cmd",
+                 "ТехПульт\\\"", "ТехПульт ", "RustDesk_Admin", "RustDesk应用"] {
+        assert!(validate_install_app_name(name).is_err(), "accepted: {}", name);
+    }
+}
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            (path / "validator.rs").write_text(harness, encoding="utf-8")
+            binary = path / ("validator.exe" if os.name == "nt" else "validator")
+            subprocess.run([rustc, str(path / "validator.rs"), "-o", str(binary)], check=True)
+            subprocess.run([str(binary)], check=True)
 
 
 if __name__ == "__main__":
