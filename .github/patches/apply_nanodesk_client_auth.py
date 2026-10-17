@@ -293,6 +293,15 @@ def patch_flutter_login(project_root: Path) -> None:
         r"    final title = Row\(",
         re.DOTALL,
     )
+    original_widget = auth_widget_pattern.search(content)
+    if original_widget is None:
+        raise RuntimeError(f"Не найден блок OIDC-кнопок в {login_file}")
+    # Сохраняем штатное управление попыткой входа, добавленное в 1.5.0.
+    auth_callbacks = re.findall(
+        r"^\s*((?:startAuth|cancelAuth|canStartAuth):[^\n]+,)$",
+        original_widget.group(),
+        re.MULTILINE,
+    )
     auth_widget = """    thirdAuthWidget() => Obx(() {
           return Offstage(
             offstage: loginOptions.isEmpty,
@@ -319,6 +328,13 @@ def patch_flutter_login(project_root: Path) -> None:
         });
 
     final title = Row("""
+    if auth_callbacks:
+        auth_widget = auth_widget.replace(
+            "              curOP: curOP,\n",
+            "              curOP: curOP,\n"
+            + "".join(f"              {callback}\n" for callback in auth_callbacks),
+            1,
+        )
     content, replacements = auth_widget_pattern.subn(auth_widget, content, count=1)
     if replacements != 1:
         raise RuntimeError(f"Не найден блок OIDC-кнопок в {login_file}")

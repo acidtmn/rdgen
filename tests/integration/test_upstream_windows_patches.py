@@ -1,6 +1,7 @@
 import concurrent.futures
 import importlib.util
 from pathlib import Path
+import re
 import unittest
 from unittest.mock import patch
 import urllib.request
@@ -93,7 +94,20 @@ class UpstreamWindowsPatchTests(unittest.TestCase):
         self.assertIn('version = "1.5.0"', sources[SOURCE_ROOT / "Cargo.toml"])
         self.assertIn('Culture="ru-ru"', sources[SOURCE_ROOT / "res/msi/Package/Language/Package.ru-ru.wxl"])
         self.assertIn("https://tehpult.ru", sources[SOURCE_ROOT / "res/msi/Package/License.rtf"])
-        self.assertIn("Вход в ТехПульт", sources[SOURCE_ROOT / "flutter/lib/common/widgets/login.dart"])
+        login = sources[SOURCE_ROOT / "flutter/lib/common/widgets/login.dart"]
+        self.assertIn("Вход в ТехПульт", login)
+        constructor = re.search(r"\n  LoginWidgetOP\(\{(.*?)\}\)", login, re.DOTALL)
+        self.assertIsNotNone(constructor)
+        login_widget = re.search(
+            r"thirdAuthWidget\(\).*?child: LoginWidgetOP\((.*?)\n            \),",
+            login, re.DOTALL,
+        )
+        self.assertIsNotNone(login_widget)
+        for parameter in re.findall(r"required this\.(\w+)", constructor.group(1)):
+            self.assertRegex(login_widget.group(1), rf"\b{parameter}:")
+        for callback in ("startAuth: oidcAuth.start", "cancelAuth: oidcAuth.cancelCurrent",
+                         "canStartAuth: oidcAuth.canStart"):
+            self.assertIn(callback, login_widget.group(1))
         self.assertIn("secure_tcp_required(&mut socket, &key).await", sources[SOURCE_ROOT / "src/client.rs"])
         toolbar = sources[SOURCE_ROOT / "flutter/lib/desktop/widgets/remote_toolbar.dart"]
         self.assertIn("class _MonitorCycle", toolbar)
