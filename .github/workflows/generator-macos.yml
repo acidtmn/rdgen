@@ -726,8 +726,8 @@ jobs:
           if [ '${{ env.logolink_url }}' != 'false' ]; then
             cmp .rdgen-branding/logo.png "$app_bundle/Contents/Frameworks/App.framework/Versions/Current/Resources/flutter_assets/assets/logo.png"
           fi
-          lipo -verify_arch '${{ matrix.job.arch == 'aarch64' && 'arm64' || 'x86_64' }}' "$app_bundle/Contents/MacOS/$executable"
-          lipo -verify_arch '${{ matrix.job.arch == 'aarch64' && 'arm64' || 'x86_64' }}' "$app_bundle/Contents/MacOS/service"
+          lipo "$app_bundle/Contents/MacOS/$executable" -verify_arch '${{ matrix.job.arch == 'aarch64' && 'arm64' || 'x86_64' }}'
+          lipo "$app_bundle/Contents/MacOS/service" -verify_arch '${{ matrix.job.arch == 'aarch64' && 'arm64' || 'x86_64' }}'
           echo "Verified macOS bundle: $display_name ($bundle_identifier)"
 
       - name: Create DMG
