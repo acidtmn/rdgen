@@ -92,7 +92,7 @@ class RussianMsiPatchTests(SimpleTestCase):
             )
 
             # Вместо английского privacy-текста должен появиться полный русский документ
-            # с официальными ссылками на privacy и terms сайта NanoDesk.
+            # с официальными ссылками на privacy и terms сайта ТехПульт.
             patch_module.patch_license(
                 project_root,
                 app_name="NanoDesk",
@@ -111,11 +111,11 @@ class RussianMsiPatchTests(SimpleTestCase):
                 patch_module.to_rtf_unicode("152-ФЗ"),
                 license_content,
             )
-            self.assertIn("https://nanodesk.ru", license_content)
-            self.assertIn("https://nanodesk.ru/privacy", license_content)
-            self.assertIn("https://nanodesk.ru/terms", license_content)
+            self.assertIn("https://tehpult.ru", license_content)
+            self.assertIn("https://tehpult.ru/privacy", license_content)
+            self.assertIn("https://tehpult.ru/terms", license_content)
             self.assertIn(
-                patch_module.to_rtf_unicode("Информационная страница: https://nanodesk.ru."),
+                patch_module.to_rtf_unicode("Информационная страница: https://tehpult.ru."),
                 license_content,
             )
             self.assertNotIn("rdgen.nanodesk.ru/privacy.html", license_content)
@@ -141,7 +141,7 @@ class RussianMsiPatchTests(SimpleTestCase):
             )
 
             license_content = license_path.read_text(encoding="utf-8")
-            self.assertIn("https://nanodesk.ru", license_content)
+            self.assertIn("https://tehpult.ru", license_content)
             self.assertNotIn("https://NanoDesk.", license_content)
 
     def test_normalize_privacy_url_fixes_broken_rdgen_domain(self):
@@ -152,7 +152,7 @@ class RussianMsiPatchTests(SimpleTestCase):
                 "https://rdgen.NanoDesk/privacy.html",
                 "https://nanodesk.ru",
             ),
-            "https://nanodesk.ru/privacy",
+            "https://tehpult.ru/privacy",
         )
 
     def test_normalized_urls_are_persisted_for_following_workflow_steps(self):

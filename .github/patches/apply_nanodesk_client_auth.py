@@ -555,7 +555,13 @@ def patch_connection_security_notice(project_root: Path) -> None:
     """Объясняет предупреждение E2EE по-русски, не отключая защитную проверку клиента."""
     language_file = project_root / "src" / "lang" / "ru.rs"
     content = language_file.read_text(encoding="utf-8")
-    content = replace_required(content, '("Continue", ""),', '("Continue", "Продолжить"),', language_file)
+    if '("Continue", "Продолжить"),' not in content:
+        content = replace_required(content, '("Continue", ""),', '("Continue", "Продолжить"),', language_file)
+    # В 1.5.0 upstream исправил русский перевод; сетевую проверку E2EE не меняем.
+    content = content.replace(
+        '("conn-e2ee-unavailable-tip", "Невозможно проверить сквозное шифрование.\\nУдалённое устройство, возможно, ещё настраивается. Повторите попытку позже.\\nЕсли это повторяется, сервер может быть ненадёжным.\\nВсё равно продолжить?"),',
+        '("conn-e2ee-unavailable-tip", "Не удалось проверить сквозное шифрование.\\nУдаленное устройство, возможно, еще настраивается. Повторите попытку позже.\\nЕсли это повторяется, сервер может быть ненадежным.\\nВсе равно продолжить?"),',
+    )
     content = replace_required(
         content,
         '("conn-e2ee-unavailable-tip", "Не удалось проверить сквозное шифрование.\\nУдаленное устройство, возможно, еще настраивается. Повторите попытку позже.\\nЕсли это повторяется, сервер может быть ненадежным.\\nВсе равно продолжить?"),',
