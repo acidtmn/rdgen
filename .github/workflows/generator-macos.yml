@@ -6,7 +6,7 @@ on:
       version:
         description: 'version to buld'
         required: true
-        default: ''
+        default: '1.5.0'
         type: string
       zip_url:
         description: 'url to zip of json'
@@ -18,6 +18,11 @@ on:
         required: false
         default: ''
         type: string
+      publish:
+        description: 'Replace the public macOS downloads after testing'
+        required: false
+        default: false
+        type: boolean
 
 env:
   SCITER_RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503, also 1.78 has ABI change which causes our sciter version not working, https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
@@ -31,10 +36,9 @@ env:
   ANDROID_FLUTTER_VERSION: "3.24.5" # >= 3.16 is very slow on my android phone, but work well on most of others. We may switch to new flutter after changing to texture rendering (I believe it can solve my problem).
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"  # for arm64 linux because official Dart SDK does not work
   FLUTTER_ELINUX_VERSION: "3.16.9"
-  TAG_NAME: "${{ inputs.upload-tag }}"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  # vcpkg version: 2024.07.12
-  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+  # В 1.5.0 baseline совпадает с официальным macOS workflow и vcpkg.json.
+  VCPKG_COMMIT_ID: "${{ inputs.version == '1.5.0' && '9e593bb18ea69cc5095e012465dcd675a822ed0d' || '120deac3062162151622ca4860575a33844ba10b' }}"
   ARMV7_VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836"
   VERSION: "${{ inputs.version }}"
   NDK_VERSION: "r27c"
@@ -45,7 +49,19 @@ env:
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}"
 
 jobs:
+  validate-source:
+    if: ${{ inputs.version == '1.5.0' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify transport and shared patches before native compilation
+        run: |
+          python3 -m unittest discover -s tests -p 'test_tehpult_transport.py' -v
+          python3 -m unittest discover -s tests/integration -p 'test_upstream_windows_patches.py' -v
+
   setup:
+    needs: validate-source
+    if: ${{ !cancelled() && (needs.validate-source.result == 'success' || needs.validate-source.result == 'skipped') }}
     uses: ./.github/workflows/fetch-encrypted-secrets.yml
     with:
       zip_url_json: ${{ inputs.zip_url }}
@@ -53,6 +69,8 @@ jobs:
     secrets: inherit
 
   generate-bridge:
+    needs: validate-source
+    if: ${{ !cancelled() && (needs.validate-source.result == 'success' || needs.validate-source.result == 'skipped') }}
     uses: ./.github/workflows/bridge.yml
     with:
       version: ${{ inputs.version }}
@@ -61,6 +79,7 @@ jobs:
     name: ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
     needs: [generate-bridge, setup]
+    if: ${{ !cancelled() && needs.generate-bridge.result == 'success' && needs.setup.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
@@ -149,11 +168,21 @@ jobs:
             --output nanodesk_client_auth.tis
           python3 apply_nanodesk_client_auth.py --template nanodesk_client_auth.tis
 
+      - name: Apply Tehpult 1.5.0 rendezvous transport
+        if: ${{ env.VERSION == '1.5.0' }}
+        shell: bash
+        run: |
+          patch_base="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches"
+          curl --fail --show-error --location --retry 3 \
+            "$patch_base/apply_tehpult_transport.py" \
+            --output apply_tehpult_transport.py
+          python3 apply_tehpult_transport.py
+
       - name: Install imagemagick and potrace and nasm and and
         shell: bash
         run: |
           brew install imagemagick potrace cmake gcc wget ninja
-          echo "$(brew --prefix imagemagick)/bin" >> $GITHUB_PATH
+          echo "$(brew --prefix imagemagick)/bin" >> "$GITHUB_PATH"
 
       - name: Update macOS Info.plist and settings
         continue-on-error: false
@@ -164,10 +193,19 @@ jobs:
           cp ./flutter/macos/Runner/Info.plist ./flutter/macos/Runner/Info.plist.bak
           cp ./flutter/macos/Runner/Configs/AppInfo.xcconfig ./flutter/macos/Runner/Configs/AppInfo.xcconfig.bak
          
-          # MACSTUFF Update Info.plist
-          sed -i '' -e 's|<key>CFBundleName</key>.*<string>.*</string>|<key>CFBundleName</key>\n\t<string>${{ env.appname }}</string>|' ./flutter/macos/Runner/Info.plist
-          sed -i '' -e 's|<key>CFBundleDisplayName</key>.*<string>.*</string>|<key>CFBundleDisplayName</key>\n\t<string>${{ env.appname }}</string>|' ./flutter/macos/Runner/Info.plist
-          sed -i '' -e 's|<key>CFBundleIdentifier</key>.*<string>.*</string>|<key>CFBundleIdentifier</key>\n\t<string>ru.tehpult.client</string>|' ./flutter/macos/Runner/Info.plist
+          # Значения plist расположены на разных строках, поэтому меняем их через plistlib.
+          python3 - <<'PY'
+          import os
+          import plistlib
+          from pathlib import Path
+
+          path = Path('flutter/macos/Runner/Info.plist')
+          info = plistlib.loads(path.read_bytes())
+          info['CFBundleName'] = os.environ['appname']
+          info['CFBundleDisplayName'] = os.environ['appname']
+          info['CFBundleIdentifier'] = 'ru.tehpult.client'
+          path.write_bytes(plistlib.dumps(info, sort_keys=False))
+          PY
           # sed -i '' '/<key>NSHumanReadableCopyright<\/key>/{n;s/<string>.*<\/string>/<string>Copyright 2025 ${{ env.appname }}. All rights reserved.<\/string>/;}' ./flutter/macos/Runner/Info.plist
           
           # MACSTUFF Update AppInfo.xcconfig
@@ -176,8 +214,8 @@ jobs:
           sed -i '' -E 's|^PRODUCT_COPYRIGHT = .*|PRODUCT_COPYRIGHT = © 2026 ${{ env.appname }}. https://tehpult.ru|' ./flutter/macos/Runner/Configs/AppInfo.xcconfig
           # Keep DEVELOPMENT_TEAM if it exists, don't blank it out
 
-          sed -i -e 's|Purslane Ltd.|${{ env.appname }}|' ./Cargo.toml
-          sed -i -e 's|Purslane Ltd|${{ env.appname }}|' ./libs/portable/Cargo.toml
+          sed -i '' -e 's|Purslane Ltd.|${{ env.appname }}|' ./Cargo.toml
+          sed -i '' -e 's|Purslane Ltd|${{ env.appname }}|' ./libs/portable/Cargo.toml
           
           # Update Xcode project settings
           sed -i '' -e 's/PRODUCT_NAME = "RustDesk"/PRODUCT_NAME = "${{ env.appname }}"/' ./flutter/macos/Runner.xcodeproj/project.pbxproj
@@ -211,9 +249,9 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          sed -i -e 's|https://rustdesk.com/download|${{ env.downloadLink }}|' ./flutter/lib/desktop/pages/desktop_home_page.dart
-          sed -i -e 's|https://rustdesk.com/download|${{ env.downloadLink }}|' ./flutter/lib/mobile/pages/connection_page.dart
-          sed -i -e 's|https://rustdesk.com/download|${{ env.downloadLink }}|' ./src/ui/index.tis
+          sed -i '' -e 's|https://rustdesk.com/download|${{ env.downloadLink }}|' ./flutter/lib/desktop/pages/desktop_home_page.dart
+          sed -i '' -e 's|https://rustdesk.com/download|${{ env.downloadLink }}|' ./flutter/lib/mobile/pages/connection_page.dart
+          sed -i '' -e 's|https://rustdesk.com/download|${{ env.downloadLink }}|' ./src/ui/index.tis
 
           # Update slogan
           #sed -i '' '/<key>NSHumanReadableCopyright<\/key>/{n;s/<string>.*<\/string>/<string>Copyright 2025 ${{ env.appname }}. All rights reserved.<\/string>/;}' ./flutter/macos/Runner/Info.plist
@@ -229,9 +267,9 @@ jobs:
           sed -i '' -e 's/("About RustDesk", "Over RustDesk")/("About RustDesk", "Over ${{ env.appname }}")/' ./src/lang/nl.rs
           sed -i '' -e 's/("About", "Over")/("About", "Over ${{ env.appname }}")/' ./src/lang/nl.rs
 
-          sed -i -e 's|rs-ny.rustdesk.com|${{ env.server }}|' ./libs/hbb_common/src/config.rs
-          sed -i -e 's|OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=|${{ env.key }}|' ./libs/hbb_common/src/config.rs
-          sed -i -e 's|https://admin.rustdesk.com|${{ env.apiServer }}|' ./src/common.rs
+          sed -i '' -e 's|rs-ny.rustdesk.com|${{ env.server }}|' ./libs/hbb_common/src/config.rs
+          sed -i '' -e 's|OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=|${{ env.key }}|' ./libs/hbb_common/src/config.rs
+          sed -i '' -e 's|https://admin.rustdesk.com|${{ env.apiServer }}|' ./src/common.rs
           
           patch_base="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches"
           curl --fail --show-error --location --retry 3 "$patch_base/allowCustom.py" --output allowCustom.py
@@ -274,17 +312,18 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
 
       - name: Patch flutter
-        continue-on-error: true
         run: |
-            cd $(dirname $(dirname $(which flutter)))
-            [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+          cd "$(dirname "$(dirname "$(command -v flutter)")")"
+          if [[ "3.24.5" == '${{ env.FLUTTER_VERSION }}' ]]; then
+            git apply "$GITHUB_WORKSPACE/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+          fi
       
       - name: Workaround for flutter issue
         shell: bash
         run: |
           cd "$(dirname "$(which flutter)")"
           # https://github.com/flutter/flutter/issues/133533
-          sed -i -e 's/_setFramesEnabledState(false);/\/\/_setFramesEnabledState(false);/g' ../packages/flutter/lib/src/scheduler/binding.dart
+          sed -i '' -e 's/_setFramesEnabledState(false);/\/\/_setFramesEnabledState(false);/g' ../packages/flutter/lib/src/scheduler/binding.dart
           grep -n '_setFramesEnabledState(false);' ../packages/flutter/lib/src/scheduler/binding.dart
         
       - name: Install Rust toolchain
@@ -452,14 +491,14 @@ jobs:
 
       - name: fix connection delay
         continue-on-error: false
-        if: ${{ env.delayFix == 'true' }}
+        if: ${{ env.VERSION != '1.5.0' && env.delayFix == 'true' }}
         shell: bash
         run: |
-          sed -i -e 's|!key.is_empty()|false|' ./src/client.rs
+          sed -i '' -e 's|!key.is_empty()|false|' ./src/client.rs
 
       - name: add cycle monitors to toolbar
         continue-on-error: true
-        if: env.cycleMonitor == 'true'
+        if: ${{ env.VERSION != '1.5.0' && env.cycleMonitor == 'true' }}
         run: |
           wget https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/cycle_monitor.diff
           git apply cycle_monitor.diff
@@ -482,8 +521,8 @@ jobs:
         continue-on-error: true
         if: env.removeNewVersionNotif == 'true'
         run: | 
-          sed -i -e 's|updateUrl.isNotEmpty|false|' ./flutter/lib/desktop/pages/desktop_home_page.dart
-          sed -i '/let (request, url) =/,/Ok(())/{/Ok(())/!d}' ./src/common.rs
+          sed -i '' -e 's|updateUrl.isNotEmpty|false|' ./flutter/lib/desktop/pages/desktop_home_page.dart
+          sed -i '' '/let (request, url) =/,/Ok(())/{/Ok(())/!d}' ./src/common.rs
 
       - name: Restore bridge files
         uses: actions/download-artifact@v4
@@ -498,11 +537,13 @@ jobs:
           doNotCache: false
 
       - name: Install vcpkg dependencies
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.job.vcpkg-triplet }}
         run: |
           install_succeeded=false
           for attempt in 1 2 3; do
             echo "macOS vcpkg attempt ${attempt}/3 for ${{ matrix.job.vcpkg-triplet }}"
-            if $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"; then
+            if "$VCPKG_ROOT/vcpkg" install --triplet '${{ matrix.job.vcpkg-triplet }}' --x-install-root="$VCPKG_ROOT/installed"; then
               install_succeeded=true
               break
             fi
@@ -524,20 +565,34 @@ jobs:
           fi
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
 
-      - name: Create MacOS directory structure
+      - name: Prepare branded macOS service destination
+        shell: python
         run: |
-          mkdir -p ./build/macos/Build/Products/Release/RustDesk.app/Contents/MacOS
+          import ast
+          import os
+          from pathlib import Path
+          import shlex
+
+          path = Path('build.py')
+          source = path.read_text(encoding='utf-8')
+          original = 'cp -rf ../target/release/service ./build/macos/Build/Products/Release/RustDesk.app/Contents/MacOS/'
+          destination = './build/macos/Build/Products/Release/' + os.environ['appname'] + '.app/Contents/MacOS/'
+          replacement = 'cp -rf ../target/release/service ' + shlex.quote(destination)
+          if source.count(repr(original)) != 1:
+              raise RuntimeError('Unexpected macOS service copy contract in build.py')
+          source = source.replace(repr(original), repr(replacement), 1)
+          ast.parse(source)
+          path.write_text(source, encoding='utf-8')
 
       - name: Build rustdesk
         run: |
           if [ "${{ matrix.job.target }}" = "aarch64-apple-darwin" ]; then
             MIN_MACOS_VERSION="12.3"
-            sed -i -e "s/MACOSX_DEPLOYMENT_TARGET\=[0-9]*.[0-9]*/MACOSX_DEPLOYMENT_TARGET=${MIN_MACOS_VERSION}/" build.py
-            sed -i -e "s/platform :osx, '.*'/platform :osx, '${MIN_MACOS_VERSION}'/" flutter/macos/Podfile
-            sed -i -e "s/osx_minimum_system_version = \"[0-9]*.[0-9]*\"/osx_minimum_system_version = \"${MIN_MACOS_VERSION}\"/" Cargo.toml
-            sed -i -e "s/MACOSX_DEPLOYMENT_TARGET = [0-9]*.[0-9]*;/MACOSX_DEPLOYMENT_TARGET = ${MIN_MACOS_VERSION};/" flutter/macos/Runner.xcodeproj/project.pbxproj
+            sed -i '' -e "s/MACOSX_DEPLOYMENT_TARGET\=[0-9]*.[0-9]*/MACOSX_DEPLOYMENT_TARGET=${MIN_MACOS_VERSION}/" build.py
+            sed -i '' -e "s/platform :osx, '.*'/platform :osx, '${MIN_MACOS_VERSION}'/" flutter/macos/Podfile
+            sed -i '' -e "s/osx_minimum_system_version = \"[0-9]*.[0-9]*\"/osx_minimum_system_version = \"${MIN_MACOS_VERSION}\"/" Cargo.toml
+            sed -i '' -e "s/MACOSX_DEPLOYMENT_TARGET = [0-9]*.[0-9]*;/MACOSX_DEPLOYMENT_TARGET = ${MIN_MACOS_VERSION};/" flutter/macos/Runner.xcodeproj/project.pbxproj
           fi
-          sed -i -e "s/RustDesk.app/\"${{ env.appname }}.app\"/" build.py
           ./build.py --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }}
 
       # - name: Copy service file
@@ -569,13 +624,13 @@ jobs:
         continue-on-error: false
         shell: bash
         run: |
-          ASSETS_DIR="build/macos/Build/Products/Release/RustDesk.app/Contents/Frameworks/App.framework/Versions/Current/Resources/flutter_assets/assets"
-          mkdir -p "$ASSETS_DIR"
+          ASSETS_DIR="$GITHUB_WORKSPACE/flutter/build/macos/Build/Products/Release/${{ env.appname }}.app/Contents/Frameworks/App.framework/Versions/Current/Resources/flutter_assets/assets"
+          test -d "$ASSETS_DIR"
           if [ -f "$ASSETS_DIR/icon.svg" ]; then
             mv "$ASSETS_DIR/icon.svg" "$ASSETS_DIR/icon.svg.bak"
           fi
           # First convert PNG to PBM (bitmap)
-          magick convert ./res/icon.png ./temp_icon.pbm
+          magick ./res/icon.png ./temp_icon.pbm
           # Then use potrace to convert to SVG
           potrace --svg -o "$ASSETS_DIR/icon.svg" ./temp_icon.pbm
           rm ./temp_icon.pbm
@@ -585,8 +640,8 @@ jobs:
         continue-on-error: false
         shell: bash
         run: |
-          ASSETS_DIR="build/macos/Build/Products/Release/RustDesk.app/Contents/Frameworks/App.framework/Versions/Current/Resources/flutter_assets/assets"
-          mkdir -p "$ASSETS_DIR"
+          ASSETS_DIR="$GITHUB_WORKSPACE/flutter/build/macos/Build/Products/Release/${{ env.appname }}.app/Contents/Frameworks/App.framework/Versions/Current/Resources/flutter_assets/assets"
+          test -d "$ASSETS_DIR"
           test -s ./.rdgen-branding/logo.png
           cp ./.rdgen-branding/logo.png "$ASSETS_DIR/logo.png"
 
@@ -624,7 +679,7 @@ jobs:
                 # Try to find the actual executable
                 echo "Available executables in MacOS directory:"
                 ls -la "${{ env.appname }}.app/Contents/MacOS/"
-                ACTUAL_EXECUTABLE=$(ls "${{ env.appname }}.app/Contents/MacOS/" | head -n 1)
+                ACTUAL_EXECUTABLE=$(plutil -extract CFBundleExecutable raw "${{ env.appname }}.app/Contents/Info.plist")
                 if [ -n "$ACTUAL_EXECUTABLE" ]; then
                   echo "Found executable: $ACTUAL_EXECUTABLE"
                   rcodesign sign --p12-file certificate.p12 --p12-password "${{ secrets.MACOS_P12_PASSWORD }}" \
@@ -653,21 +708,31 @@ jobs:
         run: |
           set -euo pipefail
           release_dir="$GITHUB_WORKSPACE/flutter/build/macos/Build/Products/Release"
-          app_bundle=$(find "$release_dir" -maxdepth 1 -type d -name '*.app' -print -quit)
-          test -n "$app_bundle"
-          find "$app_bundle/Contents/MacOS" -maxdepth 1 -type f -size +0c -print -quit | grep -q .
+          app_bundle="$release_dir/${{ env.appname }}.app"
+          test -d "$app_bundle"
+          executable=$(plutil -extract CFBundleExecutable raw "$app_bundle/Contents/Info.plist")
+          test -x "$app_bundle/Contents/MacOS/$executable"
+          test -s "$app_bundle/Contents/MacOS/service"
 
           display_name=$(plutil -extract CFBundleName raw "$app_bundle/Contents/Info.plist")
           bundle_identifier=$(plutil -extract CFBundleIdentifier raw "$app_bundle/Contents/Info.plist")
           test "$display_name" = '${{ env.appname }}'
           test "$bundle_identifier" = 'ru.tehpult.client'
-          ! grep -Eiq 'Purslane' "$app_bundle/Contents/Info.plist"
+          if grep -Eiq 'Purslane' "$app_bundle/Contents/Info.plist"; then
+            echo 'Unexpected upstream copyright in app bundle' >&2
+            exit 1
+          fi
           find "$app_bundle/Contents" -type f -path '*/flutter_assets/assets/logo.png' -size +0c -print -quit | grep -q .
+          if [ '${{ env.logolink_url }}' != 'false' ]; then
+            cmp .rdgen-branding/logo.png "$app_bundle/Contents/Frameworks/App.framework/Versions/Current/Resources/flutter_assets/assets/logo.png"
+          fi
+          lipo -verify_arch '${{ matrix.job.arch == 'aarch64' && 'arm64' || 'x86_64' }}' "$app_bundle/Contents/MacOS/$executable"
+          lipo -verify_arch '${{ matrix.job.arch == 'aarch64' && 'arm64' || 'x86_64' }}' "$app_bundle/Contents/MacOS/service"
           echo "Verified macOS bundle: $display_name ($bundle_identifier)"
 
       - name: Create DMG
         run: |
-          cd /Users/runner/work/${{ github.event.repository.name }}/${{ github.event.repository.name }}/flutter/build/macos/Build/Products/Release
+          cd "$GITHUB_WORKSPACE/flutter/build/macos/Build/Products/Release"
           # Print directory contents for debugging
           echo "Directory contents:"
           ls -la
@@ -691,12 +756,12 @@ jobs:
             --app-drop-link 600 185 \
             "${{ env.appname }}-${{ matrix.job.arch }}.dmg" \
             "${{ env.appname }}.app"
-          mv "${{ env.appname }}-${{ matrix.job.arch }}.dmg" $GITHUB_WORKSPACE/
+          mv "${{ env.appname }}-${{ matrix.job.arch }}.dmg" "$GITHUB_WORKSPACE/"
   
       - name: Rename rustdesk
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
-          cd $GITHUB_WORKSPACE
+          cd "$GITHUB_WORKSPACE"
           echo "Directory contents:"
           ls -la
             

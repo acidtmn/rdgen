@@ -1,5 +1,6 @@
 import concurrent.futures
 import importlib.util
+import json
 import os
 from pathlib import Path
 import re
@@ -23,6 +24,7 @@ SOURCE_FILES = (
     "Cargo.toml", "libs/portable/Cargo.toml", "src/lang/ru.rs", "src/common.rs",
     "src/client.rs", "src/lang.rs", "res/msi/Package/Package.wxs",
     "src/platform/windows.rs", "src/platform/windows/installer_shell.rs",
+    "libs/hbb_common/src/config.rs", "libs/portable/src/main.rs", "build.py", "src/lang/en.rs",
     "res/msi/Package/Package.wixproj", "res/msi/Package/License.rtf",
     "res/msi/Package/Language/Package.en-us.wxl",
     "res/msi/Package/Language/WixExt_en-us.wxl",
@@ -43,10 +45,19 @@ class UpstreamWindowsPatchTests(unittest.TestCase):
         cls.distribution = load_module("distribution_patch", ".github/patches/apply_russian_distribution.py")
         cls.transport = load_module("transport_patch", ".github/patches/apply_tehpult_transport.py")
         cls.installer = load_module("installer_patch", ".github/patches/apply_tehpult_windows_installer.py")
+        cls.sciter = load_module("sciter_configuration", ".github/scripts/configure_tehpult_sciter.py")
+
+        with urllib.request.urlopen(
+            'https://api.github.com/repos/rustdesk/rustdesk/contents/libs/hbb_common?ref=1.5.0',
+            timeout=30,
+        ) as response:
+            common_commit = json.load(response)['sha']
 
         # Проверяем реальные исходники тега, не создавая второй checkout или копию проекта.
         def fetch(relative):
             url = "https://raw.githubusercontent.com/rustdesk/rustdesk/1.5.0/" + relative
+            if relative.startswith("libs/hbb_common/"):
+                url = "https://raw.githubusercontent.com/rustdesk/hbb_common/" + common_commit + "/src/config.rs"
             with urllib.request.urlopen(url, timeout=30) as response:
                 text = response.read().decode("utf-8").replace("\r\n", "\n")
             return SOURCE_ROOT / relative, text
@@ -126,6 +137,39 @@ class UpstreamWindowsPatchTests(unittest.TestCase):
             sources[SOURCE_ROOT / "src/platform/windows/installer_shell.rs"],
             self.original[SOURCE_ROOT / "src/platform/windows/installer_shell.rs"],
         )
+
+    def test_sciter_configuration_against_150(self):
+        sources = dict(self.original)
+        original_read = Path.read_text
+
+        def read(path, *args, **kwargs):
+            return sources[path] if path in sources else original_read(path, *args, **kwargs)
+
+        def write(path, text, *args, **kwargs):
+            if not path.is_relative_to(SOURCE_ROOT):
+                raise AssertionError("Конфигуратор записывает за пределами исходников")
+            sources[path] = text
+            return len(text)
+
+        settings = {
+            "appname": "ТехПульт", "filename": "tehpult", "server": "s1.tehpult.ru:21116",
+            "key": "geD8cR8LQ57yfz7f74dMPzLQKHkC5eZEzXzlQbvDsMA=", "apiServer": "https://s1.tehpult.ru",
+            "downloadLink": "https://tehpult.ru/downloads", "urlLink": "https://tehpult.ru",
+        }
+        with patch.object(Path, "read_text", read), patch.object(Path, "write_text", write), \
+                patch.object(Path, "is_file", lambda path: path in sources), \
+                patch.object(Path, "glob", lambda path, pattern: iter(
+                    item for item in sources if item.parent == path and item.match(pattern)
+                )), patch.dict(os.environ, settings):
+            self.auth.patch_branding_details(SOURCE_ROOT)
+            self.sciter.configure(SOURCE_ROOT)
+            self.installer.patch_installer(sources[SOURCE_ROOT / "src/platform/windows.rs"])
+            self.transport.patch_transport(sources[SOURCE_ROOT / "src/client.rs"])
+
+        self.assertIn(settings["key"], sources[SOURCE_ROOT / "libs/hbb_common/src/config.rs"])
+        self.assertIn('OriginalFilename = "tehpult_x86.exe"', sources[SOURCE_ROOT / "Cargo.toml"])
+        self.assertIn('const APP_PREFIX: &str = "tehpult";', sources[SOURCE_ROOT / "libs/portable/src/main.rs"])
+        self.assertIn('custom_.txt', sources[SOURCE_ROOT / "src/common.rs"])
 
     def test_installer_accepts_brand_and_rejects_command_injection(self):
         source = self.installer.patch_installer(self.original[SOURCE_ROOT / "src/platform/windows.rs"])

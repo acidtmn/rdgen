@@ -7,7 +7,7 @@ on:
       version:
         description: "RustDesk source tag"
         required: true
-        default: "1.4.9"
+        default: "1.5.0"
         type: string
       zip_url:
         description: "URL to encrypted generator configuration"
@@ -25,11 +25,23 @@ env:
   PYTHONUTF8: "1"
   LLVM_VERSION: "15.0.6"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+  VCPKG_COMMIT_ID: "${{ inputs.version == '1.5.0' && '9e593bb18ea69cc5095e012465dcd675a822ed0d' || '120deac3062162151622ca4860575a33844ba10b' }}"
   VERSION: "${{ inputs.version }}"
 
 jobs:
+  validate-source:
+    if: ${{ inputs.version == '1.5.0' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify transport and patches before native compilation
+        run: |
+          python3 -m unittest discover -s tests -p 'test_tehpult_transport.py' -v
+          python3 -m unittest discover -s tests/integration -p 'test_upstream_windows_patches.py' -v
+
   setup:
+    needs: validate-source
+    if: ${{ !cancelled() && (needs.validate-source.result == 'success' || needs.validate-source.result == 'skipped') }}
     uses: ./.github/workflows/fetch-encrypted-secrets.yml
     with:
       zip_url_json: ${{ inputs.zip_url }}
@@ -104,14 +116,27 @@ jobs:
           grep -Fq '${{ env.apiServer }}' ./src/common.rs
 
       - name: Keep rendezvous transport compatible with account tokens
+        if: ${{ inputs.version != '1.5.0' }}
         shell: bash
         run: |
           set -euo pipefail
           occurrences="$(grep -oF '!key.is_empty()' ./src/client.rs | wc -l | tr -d ' ')"
           test "${occurrences}" = "2"
           sed -i -e 's|!key.is_empty()|false|' ./src/client.rs
-          ! grep -Fq '!key.is_empty()' ./src/client.rs
+          if grep -Fq '!key.is_empty()' ./src/client.rs; then
+            exit 1
+          fi
           grep -Fq 'if false && !token.is_empty()' ./src/client.rs
+
+      - name: Apply Tehpult 1.5.0 transport and service installer
+        if: ${{ inputs.version == '1.5.0' }}
+        shell: pwsh
+        run: |
+          $base = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches"
+          Invoke-WebRequest -Uri "$base/apply_tehpult_transport.py" -OutFile apply_tehpult_transport.py
+          Invoke-WebRequest -Uri "$base/apply_tehpult_windows_installer.py" -OutFile apply_tehpult_windows_installer.py
+          python apply_tehpult_transport.py
+          python apply_tehpult_windows_installer.py
 
       - name: Install ImageMagick
         shell: pwsh
@@ -181,7 +206,7 @@ jobs:
           install_succeeded=false
           for attempt in 1 2 3; do
             echo "vcpkg install attempt ${attempt}/3"
-            if $VCPKG_ROOT/vcpkg \
+            if "$VCPKG_ROOT/vcpkg" \
               install \
               --triplet x86-windows-static \
               --x-install-root="$VCPKG_ROOT/installed"; then
@@ -201,7 +226,7 @@ jobs:
         run: |
           python3 res/inline-sciter.py
 
-          # Ветка dyn_x86 и закреплённый commit соответствуют официальной сборке RustDesk 1.4.9.
+          # Ветка dyn_x86 и закреплённый commit соответствуют официальным сборкам 1.4.9/1.5.0.
           sed -i 's/branch = "dyn"/branch = "dyn_x86"/g' ./Cargo.toml
           cargo update -p sciter-rs --precise 674e07d3066ca9a92ced3816203ab6b652629d1e
           cargo build --locked --features inline,vram,hwcodec --release --bins

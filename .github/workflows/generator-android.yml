@@ -6,7 +6,7 @@ on:
       version:
         description: 'version to buld'
         required: true
-        default: ''
+        default: '1.5.0'
         type: string
       zip_url:
         description: 'url to zip of json'
@@ -23,6 +23,11 @@ on:
         required: false
         default: ''
         type: string
+      publish:
+        description: 'Allow production generator requests after testing'
+        required: false
+        default: false
+        type: boolean
 
 
 env:
@@ -36,13 +41,12 @@ env:
   ANDROID_FLUTTER_VERSION: "3.24.5" 
   # for arm64 linux because official Dart SDK does not work
   FLUTTER_ELINUX_VERSION: "3.16.9"
-  TAG_NAME: "${{ inputs.upload-tag }}"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  # vcpkg version: 2024.07.12
-  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+  # Для 1.5.0 используем baseline официального Android workflow и vcpkg.json.
+  VCPKG_COMMIT_ID: "${{ inputs.version == '1.5.0' && '9e593bb18ea69cc5095e012465dcd675a822ed0d' || '120deac3062162151622ca4860575a33844ba10b' }}"
   ARMV7_VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836"
   VERSION: "${{ inputs.version }}"
-  NDK_VERSION: "r27c"
+  NDK_VERSION: "${{ inputs.version == '1.5.0' && 'r28c' || 'r27c' }}"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: "${{ secrets.ANDROID_SIGNING_KEY }}"
   ANDROID_SIGNING_ALIAS: "${{ secrets.ANDROID_ALIAS }}"
@@ -55,7 +59,19 @@ env:
   STATUS_URL: "${{ secrets.GENURL }}/updategh"
 
 jobs:
+  validate-source:
+    if: ${{ inputs.version == '1.5.0' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify transport and patches before native compilation
+        run: |
+          python3 -m unittest discover -s tests -p 'test_tehpult_transport.py' -v
+          python3 -m unittest discover -s tests/integration -p 'test_upstream_windows_patches.py' -v
+
   setup:
+    needs: validate-source
+    if: ${{ !cancelled() && (needs.validate-source.result == 'success' || needs.validate-source.result == 'skipped') }}
     uses: ./.github/workflows/fetch-encrypted-secrets.yml
     with:
       zip_url_json: ${{ inputs.zip_url }}
@@ -63,14 +79,15 @@ jobs:
     secrets: inherit
 
   generate-bridge-linux:
-    if: ${{ inputs.reuse_run_id == '' }}
+    needs: validate-source
+    if: ${{ !cancelled() && (needs.validate-source.result == 'success' || needs.validate-source.result == 'skipped') && inputs.reuse_run_id == '' }}
     uses: ./.github/workflows/bridge.yml
     with:
       version: ${{ inputs.version }}
 
   build-rustdesk-android:
-    needs: [generate-bridge-linux, setup]
-    if: ${{ always() && needs.setup.result == 'success' && (needs.generate-bridge-linux.result == 'success' || inputs.reuse_run_id != '') }}
+    needs: [validate-source, generate-bridge-linux, setup]
+    if: ${{ !cancelled() && (needs.validate-source.result == 'success' || needs.validate-source.result == 'skipped') && needs.setup.result == 'success' && (needs.generate-bridge-linux.result == 'success' || inputs.reuse_run_id != '') }}
     name: build rustdesk android apk ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
     strategy:
@@ -112,7 +129,7 @@ jobs:
           zip_password: ${{ secrets.ZIP_PASSWORD }}
 
       - name: Finalize and Cleanup zip/json
-        if: always() # Run even if previous steps fail
+        if: ${{ always() && inputs.publish }} # Run even if previous steps fail
         continue-on-error: true
         uses: fjogeleit/http-request-action@v1
         with:
@@ -142,12 +159,12 @@ jobs:
       - name: Set rdgen value
         if: ${{ env.rdgen == 'true' }}
         run: |
-          echo "STATUS_URL=${{ secrets.GENURL }}/updategh" >> $GITHUB_ENV
+          echo "STATUS_URL=${{ secrets.GENURL }}/updategh" >> "$GITHUB_ENV"
 
       - name: Set rdgen value
         if: ${{ env.rdgen == 'false' }}
         run: |
-          echo "STATUS_URL=${{ env.apiServer }}/api/updategh" >> $GITHUB_ENV
+          echo "STATUS_URL=${{ env.apiServer }}/api/updategh" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: |
@@ -236,7 +253,7 @@ jobs:
       - name: Patch flutter
         continue-on-error: true
         run: |
-          cd $(dirname $(dirname $(which flutter)))
+          cd "$(dirname "$(dirname "$(which flutter)")")"
           [[ "3.24.5" == ${{env.ANDROID_FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
   
 
@@ -256,6 +273,9 @@ jobs:
 
       - name: Install vcpkg dependencies
         if: ${{ inputs.reuse_run_id == '' }}
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           case ${{ matrix.job.target }} in
             aarch64-linux-android)
@@ -444,13 +464,23 @@ jobs:
 
       - name: fix connection delay
         continue-on-error: true
-        if: ${{ env.delayFix == 'true' }}
+        if: ${{ env.VERSION != '1.5.0' && env.delayFix == 'true' }}
         shell: bash
         run: |
           sed -i -e 's|!key.is_empty()|false|' ./src/client.rs
 
+      - name: Apply Tehpult 1.5.0 rendezvous transport
+        if: ${{ env.VERSION == '1.5.0' }}
+        shell: bash
+        run: |
+          patch_base="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/.github/patches"
+          curl --fail --show-error --location --retry 3 \
+            "$patch_base/apply_tehpult_transport.py" \
+            --output apply_tehpult_transport.py
+          python3 apply_tehpult_transport.py
+
       - name: add cycle monitors to toolbar
-        if: env.cycleMonitor == 'true'
+        if: ${{ env.cycleMonitor == 'true' && env.VERSION != '1.5.0' }}
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 1
@@ -563,6 +593,8 @@ jobs:
         shell: bash
         env:
           JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
           # Increase Gradle JVM memory for CI builds
@@ -572,7 +604,7 @@ jobs:
           case ${{ matrix.job.target }} in
             aarch64-linux-android)
             mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
-            cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/
+            cp "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" ./flutter/android/app/src/main/jniLibs/arm64-v8a/
             cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
             echo -n "${{ env.custom }}" | cat > ./flutter/assets/custom_.txt
             #sed -i '/^    - assets\//a\    - assets/custom_.txt' ./flutter/pubspec.yaml
@@ -583,7 +615,7 @@ jobs:
             ;;
             armv7-linux-androideabi)
               mkdir -p ./flutter/android/app/src/main/jniLibs/armeabi-v7a
-              cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/
+              cp "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so" ./flutter/android/app/src/main/jniLibs/armeabi-v7a/
               cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/librustdesk.so
               echo -n "${{ env.custom }}" | cat > ./flutter/assets/custom_.txt
               #sed -i '/^    - assets\//a\    - assets/custom_.txt' ./flutter/pubspec.yaml
@@ -594,7 +626,7 @@ jobs:
             ;;
             x86_64-linux-android)
               mkdir -p ./flutter/android/app/src/main/jniLibs/x86_64
-              cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/libc++_shared.so ./flutter/android/app/src/main/jniLibs/x86_64/
+              cp "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/libc++_shared.so" ./flutter/android/app/src/main/jniLibs/x86_64/
               cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/x86_64/librustdesk.so
               echo -n "${{ env.custom }}" | cat > ./flutter/assets/custom_.txt
               #sed -i '/^    - assets\//a\    - assets/custom_.txt' ./flutter/pubspec.yaml
@@ -605,7 +637,7 @@ jobs:
             ;;
             i686-linux-android)
               mkdir -p ./flutter/android/app/src/main/jniLibs/x86
-              cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/i686-linux-android/libc++_shared.so ./flutter/android/app/src/main/jniLibs/x86/
+              cp "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/i686-linux-android/libc++_shared.so" ./flutter/android/app/src/main/jniLibs/x86/
               cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/x86/librustdesk.so
               echo -n "${{ env.custom }}" | cat > ./flutter/assets/custom_.txt
               #sed -i '/^    - assets\//a\    - assets/custom_.txt' ./flutter/pubspec.yaml
@@ -686,7 +718,7 @@ jobs:
             "$aligned_apk"
 
           "$build_tools/apksigner" verify --verbose --print-certs "$final_apk"
-          badging="$($build_tools/aapt dump badging "$final_apk")"
+          badging="$("$build_tools/aapt" dump badging "$final_apk")"
           printf '%s\n' "$badging" | grep -F "package: name='${androidappid}'"
           printf '%s\n' "$badging" | grep -F "versionName='${VERSION}'"
           printf '%s\n' "$badging" | grep -F "application-label:'${appname}'"
