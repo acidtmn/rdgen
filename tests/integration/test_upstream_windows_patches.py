@@ -47,10 +47,13 @@ class UpstreamWindowsPatchTests(unittest.TestCase):
         cls.installer = load_module("installer_patch", ".github/patches/apply_tehpult_windows_installer.py")
         cls.sciter = load_module("sciter_configuration", ".github/scripts/configure_tehpult_sciter.py")
 
-        with urllib.request.urlopen(
-            'https://api.github.com/repos/rustdesk/rustdesk/contents/libs/hbb_common?ref=1.5.0',
-            timeout=30,
-        ) as response:
+        common_ref = urllib.request.Request(
+            'https://api.github.com/repos/rustdesk/rustdesk/contents/libs/hbb_common?ref=1.5.0'
+        )
+        github_token = os.environ.get("GITHUB_TOKEN")
+        if github_token:
+            common_ref.add_header("Authorization", f"Bearer {github_token}")
+        with urllib.request.urlopen(common_ref, timeout=30) as response:
             common_commit = json.load(response)['sha']
 
         # Проверяем реальные исходники тега, не создавая второй checkout или копию проекта.

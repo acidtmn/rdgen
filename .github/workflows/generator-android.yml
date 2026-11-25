@@ -65,6 +65,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Verify transport and patches before native compilation
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           python3 -m unittest discover -s tests -p 'test_tehpult_transport.py' -v
           python3 -m unittest discover -s tests/integration -p 'test_upstream_windows_patches.py' -v
