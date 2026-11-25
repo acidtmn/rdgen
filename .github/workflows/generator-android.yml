@@ -433,12 +433,18 @@ jobs:
           sed -i -e "s|child: Text('rustdesk.com',|child: Text('${{ env.urlLink }}',|" ./flutter/lib/mobile/pages/settings_page.dart
           sed -i -e "s|https://rustdesk.com/privacy.html|${{ env.urlLink }}/privacy.html|" ./flutter/lib/desktop/pages/install_page.dart
 
-      - name: change app id to custom
-        if: env.androidappid != 'com.carriez.flutter_hbb'
-        continue-on-error: true
+      - name: Set Android application ID
+        if: env.androidappid != '' && env.androidappid != 'com.carriez.flutter_hbb'
         shell: bash
         run: |
-          sed -i -e 's|com.carriez.flutter_hbb|${{ env.androidappid }}|' ./flutter/android/app/build.gradle
+          if [[ ! "$androidappid" =~ ^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$ ]]; then
+            echo "Invalid Android application ID" >&2
+            exit 1
+          fi
+          gradle_file=./flutter/android/app/build.gradle
+          # Keep the namespace used for Kotlin packages and generated R classes.
+          sed -i -E "s/^([[:space:]]*applicationId[[:space:]]+)\"com\.carriez\.flutter_hbb\"/\1\"$androidappid\"/" "$gradle_file"
+          grep -F "applicationId \"$androidappid\"" "$gradle_file"
 
       - name: change download link to custom
         if: env.downloadLink != 'https://rustdesk.com/download'
